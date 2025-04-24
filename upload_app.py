@@ -1,3 +1,4 @@
+import os
 import uuid
 import logging
 import warnings
@@ -22,7 +23,7 @@ if gdrive_info:
     drive_service = build("drive", "v3", credentials=creds)
     ROOT_FOLDER_ID = gdrive_info.get("folder_id")
 
-# Suppress Streamlit warnings
+# Suppress warnings
 logging.getLogger('streamlit.ScriptRunner').setLevel(logging.ERROR)
 warnings.filterwarnings('ignore', message='missing ScriptRunContext')
 
@@ -118,14 +119,18 @@ if uploaded and drive_service and ROOT_FOLDER_ID:
         donation = st.checkbox('I donate my anonymized data for research purposes.')
         research = st.checkbox('I agree to the use of the anonymized data for research purposes.')
         deletion = st.checkbox('I can request deletion of my data at any time.')
+        voluntary = st.checkbox('I understand this is independent from ICS3 and completely voluntary; it does not affect my grade or standing.')
         extras = st.multiselect('Select additional keys to redact', sorted(extract_keys(data)))
 
-        if donation and research and deletion:
+        if donation and research and deletion and voluntary:
             redacted = anonymize(data, COMMON.union(PLATFORM[platform]).union(extras))
             with st.expander('Preview Anonymized Data'):
                 st.json(redacted)
 
-            filename = f"{user_id}_{platform}_{f.name}"
+            # strip original extension to avoid double .json
+            base_name, _ = os.path.splitext(f.name)
+            filename = f"{user_id}_{platform}_{base_name}"
+
             if st.button(f'Finalize and send {filename}.json'):
                 # Upload redacted JSON
                 fr = io.BytesIO(json.dumps(redacted, indent=2).encode('utf-8'))
@@ -136,7 +141,8 @@ if uploaded and drive_service and ROOT_FOLDER_ID:
                 ).execute()
                 st.success(f'Uploaded {filename}.json to Google Drive (ID: {user_id})')
 
-                # Survey questions
+                # Optional survey questions (voluntary)
+                st.markdown('*This survey is voluntary and independent of ICS3; it will not affect your grade or standing.*')
                 st.subheader('Optional Research Questions')
                 q1 = st.radio('Have you ever been active in a social movement?', ['Yes', 'No'])
                 sm_from = sm_to = sm_kind = None
@@ -153,7 +159,6 @@ if uploaded and drive_service and ROOT_FOLDER_ID:
                 q3 = st.text_area('Is there any post you particularly remember? (optional)')
 
                 if st.button('Submit Survey'):
-                    # Prepare survey data
                     survey = {
                         'anonymous_id': user_id,
                         'platform': platform,
@@ -167,7 +172,6 @@ if uploaded and drive_service and ROOT_FOLDER_ID:
                         'protest_reason': p_reason or '',
                         'remembered_post': q3 or ''
                     }
-                    # Upload survey JSON
                     sr = io.BytesIO(json.dumps(survey, indent=2).encode('utf-8'))
                     media_s = MediaIoBaseUpload(sr, mimetype='application/json')
                     drive_service.files().create(
@@ -182,4 +186,3 @@ elif not uploaded:
     st.info('Please upload JSON files to begin.')
 else:
     st.error('Google Drive not configured. Please check your secrets.')
-

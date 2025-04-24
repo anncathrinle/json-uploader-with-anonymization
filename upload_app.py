@@ -127,7 +127,7 @@ if uploaded and drive_service and ROOT_FOLDER_ID:
             with st.expander('Preview Anonymized Data'):
                 st.json(redacted)
 
-            # strip original extension to avoid double .json
+            # strip extension
             base_name, _ = os.path.splitext(f.name)
             filename = f"{user_id}_{platform}_{base_name}"
 
@@ -141,45 +141,51 @@ if uploaded and drive_service and ROOT_FOLDER_ID:
                 ).execute()
                 st.success(f'Uploaded {filename}.json to Google Drive (ID: {user_id})')
 
-                # Optional survey questions (voluntary)
-                st.markdown('*This survey is voluntary and independent of ICS3; it will not affect your grade or standing.*')
-                st.subheader('Optional Research Questions')
-                q1 = st.radio('Have you ever been active in a social movement?', ['Yes', 'No'])
-                sm_from = sm_to = sm_kind = None
-                if q1 == 'Yes':
-                    sm_from = st.date_input('If yes, from when?')
-                    sm_to = st.date_input('If yes, until when?')
-                    sm_kind = st.text_input('What kind of movement?')
-                q2 = st.radio('Have you ever participated in a protest?', ['Yes', 'No'])
-                p_first = p_last = p_reason = None
-                if q2 == 'Yes':
-                    p_first = st.date_input('When was your first protest?')
-                    p_last = st.date_input('When was your last protest?')
-                    p_reason = st.text_area('Why did you decide to join or stop protesting?')
-                q3 = st.text_area('Is there any post you particularly remember? (optional)')
-
-                if st.button('Submit Survey'):
-                    survey = {
-                        'anonymous_id': user_id,
-                        'platform': platform,
-                        'active_movement': q1,
-                        'movement_from': str(sm_from) if sm_from else '',
-                        'movement_until': str(sm_to) if sm_to else '',
-                        'movement_kind': sm_kind or '',
-                        'participated_protest': q2,
-                        'first_protest': str(p_first) if p_first else '',
-                        'last_protest': str(p_last) if p_last else '',
-                        'protest_reason': p_reason or '',
-                        'remembered_post': q3 or ''
-                    }
-                    sr = io.BytesIO(json.dumps(survey, indent=2).encode('utf-8'))
-                    media_s = MediaIoBaseUpload(sr, mimetype='application/json')
-                    drive_service.files().create(
-                        body={'name': f'{user_id}_survey.json', 'parents': [survey_folder]},
-                        media_body=media_s
-                    ).execute()
-                    st.success('Your survey responses have been saved. Thank you!')
-                    st.write('You can upload other platform data via the sidebar.')
+                # Ask if user wants the optional survey
+                choice = st.radio(
+                    'Would you like to answer optional research questions? (This is voluntary and does not affect your grade or standing in ICS3)',
+                    ['Yes', 'No', 'I have already answered']
+                )
+                if choice == 'Yes':
+                    st.markdown('*This survey is voluntary and independent of ICS3; it will not affect your grade or standing.*')
+                    st.subheader('Optional Research Questions')
+                    q1 = st.radio('Have you ever been active in a social movement?', ['Yes', 'No'])
+                    sm_from = sm_to = sm_kind = None
+                    if q1 == 'Yes':
+                        sm_from = st.date_input('If yes, from when?')
+                        sm_to = st.date_input('If yes, until when?')
+                        sm_kind = st.text_input('What kind of movement?')
+                    q2 = st.radio('Have you ever participated in a protest?', ['Yes', 'No'])
+                    p_first = p_last = p_reason = None
+                    if q2 == 'Yes':
+                        p_first = st.date_input('When was your first protest?')
+                        p_last = st.date_input('When was your last protest?')
+                        p_reason = st.text_area('Why did you decide to join or stop protesting?')
+                    q3 = st.text_area('Is there any post you particularly remember? (optional)')
+                    if st.button('Submit Survey'):
+                        survey = {
+                            'anonymous_id': user_id,
+                            'platform': platform,
+                            'active_movement': q1,
+                            'movement_from': str(sm_from) if sm_from else '',
+                            'movement_until': str(sm_to) if sm_to else '',
+                            'movement_kind': sm_kind or '',
+                            'participated_protest': q2,
+                            'first_protest': str(p_first) if p_first else '',
+                            'last_protest': str(p_last) if p_last else '',
+                            'protest_reason': p_reason or '',
+                            'remembered_post': q3 or ''
+                        }
+                        sr = io.BytesIO(json.dumps(survey, indent=2).encode('utf-8'))
+                        media_s = MediaIoBaseUpload(sr, mimetype='application/json')
+                        drive_service.files().create(
+                            body={'name': f'{user_id}_survey.json', 'parents': [survey_folder]},
+                            media_body=media_s
+                        ).execute()
+                        st.success('Your survey responses have been saved. Thank you!')
+                        st.write('You can upload other platform data via the sidebar.')
+                else:
+                    st.write('Thank you! You can upload other platform data via the sidebar.')
         else:
             st.info('Please check all consent boxes to proceed.')
 elif not uploaded:

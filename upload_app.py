@@ -83,7 +83,7 @@ user_id = st.session_state['user_id']
 # Sidebar info
 st.sidebar.markdown('---')
 st.sidebar.markdown(f"**Your Anonymous ID:** `{user_id}`")
-st.sidebar.write('Save this ID to manage or delete your data later.')
+st.sidebar.write('IMPORTANT DISCLAIMER:You need to save this ID to manage or delete your data later.')
 
 # PII definitions
 COMMON = {'username','userName','email','emailAddress','id','name','full_name','telephoneNumber','birthDate'}
@@ -132,12 +132,13 @@ if not st.session_state['finalized']:
 
         # Consent checkboxes
         c1 = st.checkbox('I donate my anonymized data for research purposes.')
-        c2 = st.checkbox('I agree to the use of anonymized data for research purposes.')
+        c2 = st.checkbox('I agree to the use of anonymized data for research purposes.')  # optional
         c3 = st.checkbox('I understand I can request deletion at any time.')
         c4 = st.checkbox('I understand this is independent of ICS3 and voluntary; no grade impact.')
         extras = st.multiselect('Select additional keys to redact', sorted(extract_keys(data)))
 
-        if c1 and c2 and c3 and c4:
+        # Only require donation (c1), deletion consent (c3), and voluntary consent (c4)
+        if c1 and c3 and c4:
             redacted = anonymize(data, COMMON.union(PLATFORM[platform]).union(extras))
             with st.expander('Preview Anonymized Data'):
                 st.json(redacted)
@@ -151,10 +152,10 @@ if not st.session_state['finalized']:
                 ).execute()
                 st.session_state['finalized'] = True
                 st.success(f'Uploaded {fname} to Google Drive (ID: {user_id})')
-    else:
-        st.info('Please upload a JSON file to begin.')
+        else:
+            st.info('Please agree to the required consents (donation, deletion, voluntary) to proceed.')
 
-# Step 2: Survey or skip
+# Step 2: Survey or skip Survey or skip
 if st.session_state['finalized'] and not st.session_state['survey_submitted']:
     choice = st.radio(
         'Would you like to answer optional research questions? (Voluntary, no grade impact)',
@@ -204,4 +205,5 @@ if st.session_state['finalized'] and not st.session_state['survey_submitted']:
 if st.session_state['survey_submitted']:
     st.subheader('Thank you! Your response has been recorded.')
     st.write('If you would like, you can add data from other platforms using the sidebar.')
+
 

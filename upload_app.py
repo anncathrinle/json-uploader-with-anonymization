@@ -32,7 +32,7 @@ logging.getLogger('streamlit.ScriptRunner').setLevel(logging.ERROR)
 warnings.filterwarnings('ignore', message='missing ScriptRunContext')
 
 # Page configuration
-st.set_page_config(page_title='Social Media JSON Uploader', layout='wide')
+st.set_page_config(page_title='Social media data upload & anonymization tool', layout='wide')
 
 # Helper functions
 KEY_PATTERNS = [r'Chat History with .+', r'comments?:.*', r'replies?:.*', r'posts?:.*', r'story:.*']
@@ -81,7 +81,7 @@ user_id = st.session_state['user_id']
 # Sidebar info
 st.sidebar.markdown('---')
 st.sidebar.markdown(f"**Anonymous ID:** `{user_id}`")
-st.sidebar.write('Save this ID to manage or delete your data.')
+st.sidebar.write('DISCLAIMER: Please save this ID in case you want to manage or delete your data later. Since the data is only transferred anonymised, this code would be the only way to match your data to your request.')
 
 # PII definitions
 PLATFORMS={
@@ -116,9 +116,9 @@ if not st.session_state['finalized']:
         except: data=[json.loads(l) for l in text.splitlines() if l.strip()]
         # consents
         st.write('**Consents**')
-        st.session_state['donate']=st.checkbox('Donate anonymized data for research purposes (optional)')
-        delete_ok=st.checkbox('I can request deletion of my data at any time')
-        voluntary=st.checkbox('This is voluntary/independent of ICS3; no grade impact')
+        st.session_state['donate']=st.checkbox(' (Optional) I donate my anonymized data for research purposes. I agree to its use for research purposes.')
+        delete_ok=st.checkbox('I understand that I can request deletion of my data at any time. I have saved my anonymous ID for this purpose.')
+        voluntary=st.checkbox('I understand that this is voluntary and does not have an impact for my grade of standing of the course.')
         extras=st.multiselect('Additional keys to redact', sorted(extract_keys(data)))
         if delete_ok and voluntary:
             red=anonymize(data, COMMON_PII.union(PLATFORMS[platform]).union(extras))
@@ -146,16 +146,16 @@ if not st.session_state['finalized']:
 
 # Survey
 if st.session_state['finalized'] and not st.session_state['survey_submitted']:
-    choice=st.radio('Answer optional research questions?',['Yes','No','I have already answered'])
+    choice=st.radio('Do you want to answer some optional research questions?',['Yes','No','I have already answered'])
     if choice=='Yes':
-        st.markdown('*Voluntary — no grade impact*')
-        q1=st.radio('Ever active in social movement?',['Yes','No'])
+        st.markdown('*Please note that this is completely voluntary — there is no grade impact and since it is anonymized, it is unclear who participated.*')
+        q1=st.radio('Have you ever been active in a social movement?',['Yes','No'])
         smf=smt=smtk=''
         if q1=='Yes': smf=str(st.date_input('From when?')); smt=str(st.date_input('Until when?')); smtk=st.text_input('What movement?')
-        q2=st.radio('Participated in protest?',['Yes','No'])
+        q2=st.radio('Have you ever participated in a protest?',['Yes','No'])
         pf=pl=pr=''
-        if q2=='Yes': pf=str(st.date_input('First protest?')); pl=str(st.date_input('Last protest?')); pr=st.text_area('Why join/stop?')
-        q3=st.text_area('Any post you remember?')
+        if q2=='Yes': pf=str(st.date_input('When was your first protest?')); pl=str(st.date_input('When was your last protest?')); pr=st.text_area('Why did you join/stop?')
+        q3=st.text_area('Are there any posts you specifically remember?')
         if st.button('Submit survey'):
             survey={'anonymous_id':user_id,'platform':platform,'active_movement':q1,'movement_from':smf,'movement_until':smt,'movement_kind':smtk,'participated_protest':q2,'first_protest':pf,'last_protest':pl,'protest_reason':pr,'remembered_post':q3}
             # upload survey
@@ -172,7 +172,7 @@ if st.session_state['finalized'] and not st.session_state['survey_submitted']:
 
 # Thank-you
 if st.session_state['survey_submitted']:
-    st.subheader('Thank you! You can upload another platform via sidebar.')
+    st.subheader('Thank you! You can upload your data for other platforms via the sidebar.')
 
 
 

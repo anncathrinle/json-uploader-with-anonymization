@@ -32,7 +32,7 @@ logging.getLogger('streamlit.ScriptRunner').setLevel(logging.ERROR)
 warnings.filterwarnings('ignore', message='missing ScriptRunContext')
 
 # Page config
-st.set_page_config(page_title='Social media data uploader with anonymization', layout='wide')
+st.set_page_config(page_title='Social Media JSON Uploader', layout='wide')
 
 # Helper functions
 KEY_PATTERNS = [r'Chat History with .+', r'comments?:.*', r'replies?:.*', r'posts?:.*', r'story:.*']
@@ -75,15 +75,15 @@ def get_or_create_folder(name, parent_id):
 st.session_state.setdefault('finalized', False)
 st.session_state.setdefault('survey_submitted', False)
 
-# Anonymous user ID
+# Generate/retrieve anonymous user ID
 if 'user_id' not in st.session_state:
     st.session_state['user_id'] = uuid.uuid4().hex[:8]
 user_id = st.session_state['user_id']
 
-# Sidebar info
+# Sidebar: show user ID
 st.sidebar.markdown('---')
 st.sidebar.markdown(f"**Your Anonymous ID:** `{user_id}`")
-st.sidebar.write('IMPORTANT DISCLAIMER: You need to save this ID to manage or delete your data later.')
+st.sidebar.write('IMPORTANT: Save this ID to manage or delete your data later.')
 
 # PII definitions
 COMMON = {'username','userName','email','emailAddress','id','name','full_name','telephoneNumber','birthDate'}
@@ -100,19 +100,19 @@ if not (drive_service and ROOT_FOLDER_ID):
     st.error('Google Drive not configured. Please check your secrets.')
     st.stop()
 
-# Sidebar platform selection
+# Sidebar: select platform
 platform = st.sidebar.selectbox('Select Platform', list(PLATFORM.keys()))
 
-# Create Drive folder hierarchy
+# Create folder hierarchy:
+# root → user_id → platform → redacted → research_donations & non_donations
 user_folder = get_or_create_folder(user_id, ROOT_FOLDER_ID)
 plat_folder = get_or_create_folder(platform, user_folder)
 redact_folder = get_or_create_folder('redacted', plat_folder)
-# Subfolders for donation sorting
 research_folder = get_or_create_folder('research_donations', redact_folder)
-non_donation_folder = get_or_create_folder('non_donations', redact_folder)
+non_donate_folder = get_or_create_folder('non_donations', redact_folder)
 survey_folder = get_or_create_folder('survey', user_folder)
 
-# Main UI Title
+# Main UI title
 st.title('Upload and Anonymize Social Media JSON')
 
 # File uploader
@@ -133,14 +133,14 @@ if not st.session_state['finalized']:
         except:
             data = [json.loads(line) for line in txt.splitlines() if line.strip()]
 
-        # Consent checkboxes
-        c1 = st.checkbox('(Optional) I want to donate my anonymized data for research purposes. I agree to the use of anonymized data for research purposes.')  
-        c2 = st.checkbox('I understand I can request deletion at any time.')
-        c3 = st.checkbox('I understand that uploading this data or not does NOT impact my course standing or grade. Particiption is completely anonymous and voluntary.')
+        # Consent: donation first
+        c_donate = st.checkbox('(Optional) I want to donate my anonymized data for research purposes.')
+        c_delete = st.checkbox('I understand I can request deletion of my data at any time.')
+        c_vol = st.checkbox('Uploading or not does NOT impact my grade or standing; this is voluntary and independent of ICS3.')
         extras = st.multiselect('Select additional keys to redact', sorted(extract_keys(data)))
 
-        # Only require some boxes
-        if c2 and c3:
+        # require deletion and voluntary
+        if c_delete and c_vol:
             redacted = anonymize(data, COMMON.union(PLATFORM[platform]).union(extras))
             with st.expander('Preview Anonymized Data'):
                 st.json(redacted)
@@ -148,25 +148,26 @@ if not st.session_state['finalized']:
             fname = f"{user_id}_{platform}_{base}.json"
             if st.button(f'Finalize and send {fname}'):
                 buf = io.BytesIO(json.dumps(redacted, indent=2).encode('utf-8'))
-                # Choose folder based on research agreement
-                dest_folder = research_folder if c1 else non_donation_folder
+                dest = research_folder if c_donate else non_donate_folder
                 drive_service.files().create(
-                    body={'name': fname, 'parents': [dest_folder]},
+                    body={'name': fname, 'parents': [dest]},
                     media_body=MediaIoBaseUpload(buf, mimetype='application/json')
                 ).execute()
                 st.session_state['finalized'] = True
                 st.success(f'Uploaded {fname} to Google Drive (ID: {user_id})')
         else:
-            st.info('Please agree to the required consents (deletion note, voluntary) to proceed.')
+            st.info('Please agree to deletion and voluntary consents to proceed.')
+    else:
+        st.info('Please upload a JSON file to begin.')
 
-# Step 2: Survey or skip Survey or skip
+# Step 2: Optional survey or skip
 if st.session_state['finalized'] and not st.session_state['survey_submitted']:
     choice = st.radio(
         'Would you like to answer optional research questions? (Voluntary, no grade impact)',
         ['Yes', 'No', 'I have already answered']
     )
     if choice == 'Yes':
-        st.markdown('*This survey is for research purposes and thus completely voluntary and independent of ICS3; it will not affect your grade or standing. As with the data, it is anonymous*')
+        st.markdown('*This survey is voluntary and independent of ICS3; it will not affect your grade or standing.*')
         st.subheader('Optional Research Questions')
         q1 = st.radio('Have you ever been active in a social movement?', ['Yes', 'No'])
         sm_from = sm_to = sm_kind = ''
@@ -205,10 +206,11 @@ if st.session_state['finalized'] and not st.session_state['survey_submitted']:
     else:
         st.session_state['survey_submitted'] = True
 
-# Step 3: Thank-you and navigation
+# Step 3: Thank-you & navigation
 if st.session_state['survey_submitted']:
     st.subheader('Thank you! Your response has been recorded.')
-    st.write('If you would like, you can add data from other platforms using the sidebar.')
+    st.write('If you like, you can upload data for other platforms via the sidebar.')
+
 
 
 

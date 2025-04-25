@@ -178,63 +178,17 @@ if not st.session_state.finalized:
                 st.session_state.finalized = True
                 st.success(f'Uploaded {fname} (ID: {user_id})')
         else:
-            st.info('Please agree to all consent statements to proceed.')
-    else:
-        st.info('Please upload a JSON file to begin.')
-
-# Step 2: Survey prompt or thank-you
-elif st.session_state.finalized and not st.session_state.survey_submitted:
-    # Ask survey participation choice
-    if st.session_state.survey_choice is None:
-        st.header('Optional Survey Participation')
-        st.session_state.survey_choice = st.radio(
-            'Would you like to answer optional research questions? (Voluntary, no grade impact)',
-            ['Yes', 'No', 'I have already answered']
-        )
-    choice = st.session_state.survey_choice
-    if choice == 'Yes':
-        st.markdown('*This survey is voluntary, independent of ICS3, and does not affect your grade.*')
-        st.subheader('Optional Research Questions')
-        q1 = st.radio('Have you ever been active in a social movement?', ['Yes', 'No'])
-        sm_from = sm_to = sm_kind = ''
-        if q1 == 'Yes':
-            sm_from = str(st.date_input('If yes, from when?'))
-            sm_to = str(st.date_input('If yes, until when?'))
-            sm_kind = st.text_input('What kind of movement?')
-        q2 = st.radio('Have you ever participated in a protest?', ['Yes', 'No'])
-        p_first = p_last = p_reason = ''
-        if q2 == 'Yes':
-            p_first = str(st.date_input('When was your first protest?'))
-            p_last = str(st.date_input('When was your last protest?'))
-            p_reason = st.text_area('Why did you decide to join or stop protesting?')
-        q3 = st.text_area('Is there any post you particularly remember? (optional)')
-        if st.button('Submit Survey Responses'):
-            survey = {
-                'anonymous_id': user_id,
-                'platform': platform,
-                'active_movement': q1,
-                'movement_from': sm_from,
-                'movement_until': sm_to,
-                'movement_kind': sm_kind,
-                'participated_protest': q2,
-                'first_protest': p_first,
-                'last_protest': p_last,
-                'protest_reason': p_reason,
-                'remembered_post': q3
-            }
-            buf = io.BytesIO(json.dumps(survey, indent=2).encode('utf-8'))
-            drive_service.files().create(
-                body={'name': f'{user_id}_survey.json', 'parents': [survey_folder]},
-                media_body=MediaIoBaseUpload(buf, mimetype='application/json')
-            ).execute()
-            st.session_state.survey_submitted = True
-            st.success('Your survey responses have been saved. Thank you!')
-    else:
-        # No or already answered
-        st.subheader('Thank you! Your response has been recorded.')…–’
-        st.subheader('Thank you! Your response has been recorded.')…–
+    # No or already answered
+    st.subheader('Thank you! Your response has been recorded.')
 
 # Step 3: Final message after survey or skip
+if st.session_state.survey_submitted or (
+    st.session_state.survey_choice in ['No', 'I have already answered']
+):
+    st.subheader('Thank you! Your response has been recorded.')
+    st.write(
+        'If you would like, you can add data from other platforms using the navigation menu to the left.'
+    )
 if st.session_state.survey_submitted or (
     st.session_state.survey_choice in ['No', 'I have already answered']
 ):

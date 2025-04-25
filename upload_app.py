@@ -32,7 +32,7 @@ logging.getLogger('streamlit.ScriptRunner').setLevel(logging.ERROR)
 warnings.filterwarnings('ignore', message='missing ScriptRunContext')
 
 # Page config
-st.set_page_config(page_title='Social Media JSON Uploader', layout='wide')
+st.set_page_config(page_title='Social media data uploader with anonymization', layout='wide')
 
 # Helper functions
 KEY_PATTERNS = [r'Chat History with .+', r'comments?:.*', r'replies?:.*', r'posts?:.*', r'story:.*']
@@ -83,7 +83,7 @@ user_id = st.session_state['user_id']
 # Sidebar info
 st.sidebar.markdown('---')
 st.sidebar.markdown(f"**Your Anonymous ID:** `{user_id}`")
-st.sidebar.write('IMPORTANT DISCLAIMER:You need to save this ID to manage or delete your data later.')
+st.sidebar.write('IMPORTANT DISCLAIMER: You need to save this ID to manage or delete your data later.')
 
 # PII definitions
 COMMON = {'username','userName','email','emailAddress','id','name','full_name','telephoneNumber','birthDate'}
@@ -107,6 +107,9 @@ platform = st.sidebar.selectbox('Select Platform', list(PLATFORM.keys()))
 user_folder = get_or_create_folder(user_id, ROOT_FOLDER_ID)
 plat_folder = get_or_create_folder(platform, user_folder)
 redact_folder = get_or_create_folder('redacted', plat_folder)
+# Subfolders for donation sorting
+research_folder = get_or_create_folder('research_donations', redact_folder)
+non_donation_folder = get_or_create_folder('non_donations', redact_folder)
 survey_folder = get_or_create_folder('survey', user_folder)
 
 # Main UI Title
@@ -131,14 +134,13 @@ if not st.session_state['finalized']:
             data = [json.loads(line) for line in txt.splitlines() if line.strip()]
 
         # Consent checkboxes
-        c1 = st.checkbox('I donate my anonymized data for research purposes.')
-        c2 = st.checkbox('I agree to the use of anonymized data for research purposes.')  # optional
-        c3 = st.checkbox('I understand I can request deletion at any time.')
-        c4 = st.checkbox('I understand this is independent of ICS3 and voluntary; no grade impact.')
+        c1 = st.checkbox('(Optional) I want to donate my anonymized data for research purposes. I agree to the use of anonymized data for research purposes.')  
+        c2 = st.checkbox('I understand I can request deletion at any time.')
+        c3 = st.checkbox('I understand that uploading this data or not does NOT impact my course standing or grade. Particiption is completely anonymous and voluntary.')
         extras = st.multiselect('Select additional keys to redact', sorted(extract_keys(data)))
 
-        # Only require donation (c1), deletion consent (c3), and voluntary consent (c4)
-        if c1 and c3 and c4:
+        # Only require some boxes
+        if c2 and c3:
             redacted = anonymize(data, COMMON.union(PLATFORM[platform]).union(extras))
             with st.expander('Preview Anonymized Data'):
                 st.json(redacted)
@@ -146,14 +148,16 @@ if not st.session_state['finalized']:
             fname = f"{user_id}_{platform}_{base}.json"
             if st.button(f'Finalize and send {fname}'):
                 buf = io.BytesIO(json.dumps(redacted, indent=2).encode('utf-8'))
+                # Choose folder based on research agreement
+                dest_folder = research_folder if c1 else non_donation_folder
                 drive_service.files().create(
-                    body={'name': fname, 'parents': [redact_folder]},
+                    body={'name': fname, 'parents': [dest_folder]},
                     media_body=MediaIoBaseUpload(buf, mimetype='application/json')
                 ).execute()
                 st.session_state['finalized'] = True
                 st.success(f'Uploaded {fname} to Google Drive (ID: {user_id})')
         else:
-            st.info('Please agree to the required consents (donation, deletion, voluntary) to proceed.')
+            st.info('Please agree to the required consents (deletion note, voluntary) to proceed.')
 
 # Step 2: Survey or skip Survey or skip
 if st.session_state['finalized'] and not st.session_state['survey_submitted']:
@@ -162,7 +166,7 @@ if st.session_state['finalized'] and not st.session_state['survey_submitted']:
         ['Yes', 'No', 'I have already answered']
     )
     if choice == 'Yes':
-        st.markdown('*This survey is voluntary and independent of ICS3; it will not affect your grade or standing.*')
+        st.markdown('*This survey is for research purposes and thus completely voluntary and independent of ICS3; it will not affect your grade or standing. As with the data, it is anonymous*')
         st.subheader('Optional Research Questions')
         q1 = st.radio('Have you ever been active in a social movement?', ['Yes', 'No'])
         sm_from = sm_to = sm_kind = ''
@@ -205,5 +209,6 @@ if st.session_state['finalized'] and not st.session_state['survey_submitted']:
 if st.session_state['survey_submitted']:
     st.subheader('Thank you! Your response has been recorded.')
     st.write('If you would like, you can add data from other platforms using the sidebar.')
+
 
 

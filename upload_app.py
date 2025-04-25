@@ -71,16 +71,15 @@ def get_or_create_folder(name, parent_id):
     folder = drive_service.files().create(body=meta, fields='id').execute()
     return folder['id']
 
-# Session state defaults
+# Initialize session state defaults
 st.session_state.setdefault('finalized', False)
 st.session_state.setdefault('survey_choice', None)
 st.session_state.setdefault('survey_submitted', False)
 
-# Generate/retrieve anonymous user ID
-user_id = st.session_state.get('user_id', None)
-if not user_id:
-    user_id = uuid.uuid4().hex[:8]
-    st.session_state['user_id'] = user_id
+# Anonymous user ID
+if 'user_id' not in st.session_state:
+    st.session_state['user_id'] = uuid.uuid4().hex[:8]
+user_id = st.session_state['user_id']
 
 # Sidebar info
 st.sidebar.markdown('---')
@@ -153,7 +152,6 @@ if not st.session_state['finalized']:
                 ).execute()
                 st.session_state['finalized'] = True
                 st.success(f'Uploaded {fname} to Google Drive (ID: {user_id})')
-                st.experimental_rerun()
         else:
             st.info('Please agree to all consent statements to proceed.')
     else:
@@ -212,3 +210,4 @@ if st.session_state['finalized']:
     if st.session_state['survey_submitted']:
         st.subheader('Thank you! Your response has been recorded.')
         st.write('If you would like, you can add data from other platforms using the sidebar.')
+

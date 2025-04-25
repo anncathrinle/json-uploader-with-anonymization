@@ -31,28 +31,30 @@ if gdrive_info:
 logging.getLogger('streamlit.ScriptRunner').setLevel(logging.ERROR)
 warnings.filterwarnings('ignore', message='missing ScriptRunContext')
 
-# Page config
+# Page configuration
 st.set_page_config(page_title='Social Media JSON Uploader', layout='wide')
 
-# Helper functions
+# Helper functions for anonymization
 KEY_PATTERNS = [r'Chat History with .+', r'comments?:.*', r'replies?:.*', r'posts?:.*', r'story:.*']
 
 def sanitize_key(k):
-    for p in KEY_PATTERNS:
-        if re.match(p, k, flags=re.IGNORECASE):
-            return k.split(':', 1)[0].title()
+    for pat in KEY_PATTERNS:
+        if re.match(pat, k, flags=re.IGNORECASE):
+            return k.split(':',1)[0].title()
     return k.rstrip(':')
+
 
 def extract_keys(obj):
     keys = set()
     if isinstance(obj, dict):
-        for kk, vv in obj.items():
-            sk = sanitize_key(kk)
+        for k, v in obj.items():
+            sk = sanitize_key(k)
             if not sk.isdigit(): keys.add(sk)
-            keys |= extract_keys(vv)
+            keys |= extract_keys(v)
     elif isinstance(obj, list):
         for item in obj: keys |= extract_keys(item)
     return keys
+
 
 def anonymize(obj, pii_set):
     if isinstance(obj, dict):
@@ -61,10 +63,12 @@ def anonymize(obj, pii_set):
         return [anonymize(i, pii_set) for i in obj]
     return obj
 
+
 def get_or_create_folder(name, parent_id):
+    """Return the folder ID for 'name' under 'parent_id', creating it if necessary."""
     query = f"mimeType='application/vnd.google-apps.folder' and name='{name}' and '{parent_id}' in parents"
-    resp = drive_service.files().list(q=query, fields='files(id)').execute()
-    files = resp.get('files', [])
+    res = drive_service.files().list(q=query, fields='files(id)').execute()
+    files = res.get('files', [])
     if files:
         return files[0]['id']
     meta = {'name': name, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [parent_id]}
@@ -75,141 +79,150 @@ def get_or_create_folder(name, parent_id):
 st.session_state.setdefault('finalized', False)
 st.session_state.setdefault('survey_submitted', False)
 
-# Generate/retrieve anonymous user ID
+# Generate or retrieve anonymous user ID
 if 'user_id' not in st.session_state:
     st.session_state['user_id'] = uuid.uuid4().hex[:8]
 user_id = st.session_state['user_id']
 
-# Sidebar: show user ID
+# Sidebar: show Anonymous ID
 st.sidebar.markdown('---')
 st.sidebar.markdown(f"**Your Anonymous ID:** `{user_id}`")
-st.sidebar.write('IMPORTANT: Save this ID to manage or delete your data later.')
+st.sidebar.write('Save this ID if you wish to manage or delete your data.')
 
-# PII definitions
-COMMON = {'username','userName','email','emailAddress','id','name','full_name','telephoneNumber','birthDate'}
-PLATFORM = {
+# Social media platforms and PII keys
+PLATFORMS = {
     'TikTok': {'profilePhoto','profileVideo','bioDescription','likesReceived','From','Content'},
     'Instagram': {'biography','followers_count','following_count','media_count','profile_picture'},
     'Facebook': {'friend_count','friends','posts','story','comments','likes'},
     'Twitter': {'created_at','text','source','in_reply_to_status_id','in_reply_to_user_id','retweet_count','favorite_count'},
     'Reddit': {'subreddit','author','body','selftext','post_id','created_utc','title'}
 }
+COMMON_PII = {'username','userName','email','emailAddress','id','name','full_name','telephoneNumber','birthDate'}
 
-# Ensure Drive configured
+# Ensure Google Drive is configured
 if not (drive_service and ROOT_FOLDER_ID):
-    st.error('Google Drive not configured. Please check your secrets.')
+    st.error('Google Drive not configured. Please check your Streamlit secrets.')
     st.stop()
 
-# Sidebar: select platform
-platform = st.sidebar.selectbox('Select Platform', list(PLATFORM.keys()))
+# Sidebar: choose platform
+def main():
+    platform = st.sidebar.selectbox('Select Platform', list(PLATFORMS.keys()))
+    st.title('Upload and Anonymize Social Media JSON')
+    uploaded = st.file_uploader(f'Upload JSON for {platform}', type=['json'], accept_multiple_files=False)
 
-# Create folder hierarchy:
-# root → user_id → platform → redacted → research_donations & non_donations
-user_folder = get_or_create_folder(user_id, ROOT_FOLDER_ID)
-plat_folder = get_or_create_folder(platform, user_folder)
-redact_folder = get_or_create_folder('redacted', plat_folder)
-research_folder = get_or_create_folder('research_donations', redact_folder)
-non_donate_folder = get_or_create_folder('non_donations', redact_folder)
-survey_folder = get_or_create_folder('survey', user_folder)
+    # Step 1: Finalize upload
+    if not st.session_state['finalized']:
+        if uploaded:
+            data = _load_json(uploaded)
+            # Top-level donation checkbox
+            donate = st.checkbox('(Optional) I want to donate my data for research purposes.')
+            delete_ok = st.checkbox('I understand I can request deletion of my data at any time.')
+            voluntary = st.checkbox('This is voluntary, independent of ICS3; no grade impact.')
+            extras = st.multiselect('Select additional keys to redact', sorted(extract_keys(data)))
 
-# Main UI title
-st.title('Upload and Anonymize Social Media JSON')
+            if delete_ok and voluntary:
+                redacted = anonymize(data, COMMON_PII.union(PLATFORMS[platform]).union(extras))
+                with st.expander('Preview Anonymized Data'):
+                    st.json(redacted)
+                # Allow downloading of redacted JSON
+                st.download_button(
+                    'Download Redacted JSON',
+                    data=json.dumps(redacted, indent=2),
+                    file_name=filename,
+                    mime='application/json'
+                )
+                base, _ = os.path.splitext(uploaded.name)
+                filename = f"{user_id}_{platform}_{base}.json"
+                if st.button(f'Finalize and send {filename}'):
+                    # Determine root folder based on donation choice
+                    group_name = 'research_donations' if donate else 'non_donations'
+                    group_folder = get_or_create_folder(group_name, ROOT_FOLDER_ID)
+                    user_folder = get_or_create_folder(user_id, group_folder)
+                    plat_folder = get_or_create_folder(platform, user_folder)
+                    red_folder = get_or_create_folder('redacted', plat_folder)
 
-# File uploader
-uploads = st.file_uploader(f'Upload JSON for {platform}', type=['json'], accept_multiple_files=True)
-
-# Step 1: Upload & Finalize
-if not st.session_state['finalized']:
-    if uploads:
-        f = uploads[0]
-        st.subheader(f.name)
-        raw = f.read()
-        try:
-            txt = raw.decode('utf-8-sig')
-        except:
-            txt = raw.decode('utf-8', errors='replace')
-        try:
-            data = json.loads(txt)
-        except:
-            data = [json.loads(line) for line in txt.splitlines() if line.strip()]
-
-        # Consent: donation first
-        c_donate = st.checkbox('(Optional) I want to donate my anonymized data for research purposes.')
-        c_delete = st.checkbox('I understand I can request deletion of my data at any time.')
-        c_vol = st.checkbox('Uploading or not does NOT impact my grade or standing; this is voluntary and independent of ICS3.')
-        extras = st.multiselect('Select additional keys to redact', sorted(extract_keys(data)))
-
-        # require deletion and voluntary
-        if c_delete and c_vol:
-            redacted = anonymize(data, COMMON.union(PLATFORM[platform]).union(extras))
-            with st.expander('Preview Anonymized Data'):
-                st.json(redacted)
-            base, _ = os.path.splitext(f.name)
-            fname = f"{user_id}_{platform}_{base}.json"
-            if st.button(f'Finalize and send {fname}'):
-                buf = io.BytesIO(json.dumps(redacted, indent=2).encode('utf-8'))
-                dest = research_folder if c_donate else non_donate_folder
-                drive_service.files().create(
-                    body={'name': fname, 'parents': [dest]},
-                    media_body=MediaIoBaseUpload(buf, mimetype='application/json')
-                ).execute()
-                st.session_state['finalized'] = True
-                st.success(f'Uploaded {fname} to Google Drive (ID: {user_id})')
+                    buf = io.BytesIO(json.dumps(redacted, indent=2).encode('utf-8'))
+                    drive_service.files().create(
+                        body={'name': filename, 'parents': [red_folder]},
+                        media_body=MediaIoBaseUpload(buf, mimetype='application/json')
+                    ).execute()
+                    st.session_state['finalized'] = True
+                    st.success(f'Uploaded {filename} (ID: {user_id})')
+            else:
+                st.info('Please agree to the required consents to proceed.')
         else:
-            st.info('Please agree to deletion and voluntary consents to proceed.')
-    else:
-        st.info('Please upload a JSON file to begin.')
-
-# Step 2: Optional survey or skip
-if st.session_state['finalized'] and not st.session_state['survey_submitted']:
-    choice = st.radio(
-        'Would you like to answer optional research questions? (Voluntary, no grade impact)',
-        ['Yes', 'No', 'I have already answered']
-    )
-    if choice == 'Yes':
-        st.markdown('*This survey is voluntary and independent of ICS3; it will not affect your grade or standing.*')
-        st.subheader('Optional Research Questions')
-        q1 = st.radio('Have you ever been active in a social movement?', ['Yes', 'No'])
-        sm_from = sm_to = sm_kind = ''
-        if q1 == 'Yes':
-            sm_from = str(st.date_input('If yes, from when?'))
-            sm_to = str(st.date_input('If yes, until when?'))
-            sm_kind = st.text_input('What kind of movement?')
-        q2 = st.radio('Have you ever participated in a protest?', ['Yes', 'No'])
-        p_first = p_last = p_reason = ''
-        if q2 == 'Yes':
-            p_first = str(st.date_input('When was your first protest?'))
-            p_last = str(st.date_input('When was your last protest?'))
-            p_reason = st.text_area('Why did you decide to join or stop protesting?')
-        q3 = st.text_area('Is there any post you particularly remember? (optional)')
-        if st.button('Submit Survey Responses'):
-            survey = {
-                'anonymous_id': user_id,
-                'platform': platform,
-                'active_movement': q1,
-                'movement_from': sm_from,
-                'movement_until': sm_to,
-                'movement_kind': sm_kind,
-                'participated_protest': q2,
-                'first_protest': p_first,
-                'last_protest': p_last,
-                'protest_reason': p_reason,
-                'remembered_post': q3
-            }
-            buf = io.BytesIO(json.dumps(survey, indent=2).encode('utf-8'))
-            drive_service.files().create(
-                body={'name': f'{user_id}_survey.json', 'parents': [survey_folder]},
-                media_body=MediaIoBaseUpload(buf, mimetype='application/json')
-            ).execute()
+            st.info('Upload a JSON file to begin.')
+    # Step 2: Survey or skip
+    if st.session_state['finalized'] and not st.session_state['survey_submitted']:
+        choice = st.radio(
+            'Would you like to answer optional research questions? (Voluntary, no grade impact)',
+            ['Yes', 'No', 'I have already answered']
+        )
+        if choice == 'Yes':
+            _run_survey()
+        else:
             st.session_state['survey_submitted'] = True
-            st.success('Your survey responses have been saved.')
-    else:
-        st.session_state['survey_submitted'] = True
+    # Step 3: Thank-you page
+    if st.session_state['survey_submitted']:
+        st.subheader('Thank you! Your response has been recorded.')
+        st.write('You can upload data for other platforms using the sidebar.')
 
-# Step 3: Thank-you & navigation
-if st.session_state['survey_submitted']:
-    st.subheader('Thank you! Your response has been recorded.')
-    st.write('If you like, you can upload data for other platforms via the sidebar.')
+# Utility to load JSON robustly
+def _load_json(uploaded_file):
+    raw = uploaded_file.read()
+    try:
+        text = raw.decode('utf-8-sig')
+    except:
+        text = raw.decode('utf-8', errors='replace')
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        items = []
+        for line in text.splitlines():
+            line = line.strip()
+            if not line: continue
+            try:
+                items.append(json.loads(line))
+            except:
+                continue
+        return items
+
+# Survey component
+
+def _run_survey():
+    st.markdown('*This survey is voluntary and independent of ICS3; it will not affect your grade or standing.*')
+    st.subheader('Optional Research Questions')
+    q1 = st.radio('Have you ever been active in a social movement?', ['Yes', 'No'], key='q1')
+    sm_from = sm_to = sm_kind = ''
+    if q1 == 'Yes':
+        sm_from = str(st.date_input('If yes, from when?', key='sm_from'))
+        sm_to = str(st.date_input('If yes, until when?', key='sm_to'))
+        sm_kind = st.text_input('What kind of movement?', key='sm_kind')
+    q2 = st.radio('Have you ever participated in a protest?', ['Yes', 'No'], key='q2')
+    p_first = p_last = p_reason = ''
+    if q2 == 'Yes':
+        p_first = str(st.date_input('When was your first protest?', key='p_first'))
+        p_last = str(st.date_input('When was your last protest?', key='p_last'))
+        p_reason = st.text_area('Why did you decide to join or stop protesting?', key='p_reason')
+    q3 = st.text_area('Is there any post you particularly remember? (optional)', key='q3')
+    if st.button('Submit Survey Responses'):
+        survey = {
+            'anonymous_id': user_id,
+            'platform': st.session_state.get('platform'),
+            'active_movement': q1,
+            'movement_from': sm_from,
+            'movement_until': sm_to,
+            'movement_kind': sm_kind,
+            'participated_protest': q2,
+            'first_protest': p_first,
+            'last_protest': p_last,
+            'protest_reason': p_reason,
+            'remembered_post': q3
+        }
+        # Create survey folder under same group/user
+de"}
+]}
+
 
 
 

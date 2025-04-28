@@ -84,15 +84,63 @@ st.sidebar.markdown(f"**Anonymous ID:** `{user_id}`")
 st.sidebar.write('DISCLAIMER: Please save this ID in case you want to manage or delete your data later. Since the data is only transferred anonymised, this code would be the only way to match your data to your request.')
 
 # PII definitions
-PLATFORMS={
-    'TikTok':{'profilePhoto','profileVideo','bioDescription','likesReceived','From','Content'},
-    'Instagram':{'biography','followers_count','following_count','media_count','profile_picture'},
-    'Facebook':{'friend_count','friends','posts','story','comments','likes'},
-    'Twitter':{'created_at','text','source','in_reply_to_status_id','in_reply_to_user_id','retweet_count','favorite_count'},
-    'Reddit':{'subreddit','author','body','selftext','post_id','created_utc','title'}
+COMMON_PII = {
+    # universal identifiers
+    'id', 'uuid', 'name', 'full_name', 'username', 'userName',
+    'email', 'emailAddress', 'phone', 'phone_number', 'telephoneNumber',
+    'birthDate', 'date_of_birth',
+    # device/network
+    'ip_address', 'device_id', 'deviceModel', 'os_version', 'last_login_ip',
+    # locations & urls
+    'location', 'hometown', 'current_city', 'external_url',
+    # timestamps that can identify you
+    'created_at', 'registration_time'
 }
-COMMON_PII={'username','userName','email','emailAddress','id','name','full_name','telephoneNumber','birthDate'}
 
+PLATFORMS = {
+    'TikTok': {
+        # core profile & device info
+        'uid', 'unique_id', 'nickname',
+        'profilePhoto', 'profileVideo', 'bioDescription',
+        'likesReceived', 'From', 'Content',
+        # personal PII
+        'email', 'phone_number', 'date_of_birth', 'ip_address'
+    },
+    'Instagram': {
+        # core profile
+        'username', 'full_name', 'biography', 'profile_picture',
+        # contact
+        'email', 'phone_number',
+        # demographics
+        'gender', 'birthday', 'external_url', 'account_creation_date'
+    },
+    'Facebook': {
+        # core
+        'name', 'birthday', 'gender', 'relationship_status',
+        'hometown', 'current_city',
+        # contact & social
+        'emails', 'phones', 'friend_count', 'friends',
+        # activity
+        'posts', 'story', 'comments', 'likes'
+    },
+    'Twitter': {
+        # identifiers
+        'accountId', 'username', 'accountDisplayName',
+        # profile & contact
+        'description', 'website', 'location', 'avatarMediaUrl', 'headerMediaUrl',
+        'email',
+        # metadata
+        'in_reply_to_user_id', 'source', 'retweet_count', 'favorite_count'
+    },
+    'Reddit': {
+        # account
+        'username', 'email', 'karma',
+        # content
+        'subreddit', 'author', 'body', 'selftext', 'post_id', 'title',
+        # metadata
+        'created_utc', 'ip_address'
+    }
+}
 # Ensure Drive
 if not (drive_service and ROOT_FOLDER_ID):
     st.error('Drive not configured — check secrets.')

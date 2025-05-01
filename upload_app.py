@@ -203,11 +203,36 @@ if not st.session_state['finalized']:
                         st.table(top_liked)
                     else:
                         st.info('No posts found for TikTok.')
+
+                    # Live watch history analysis
+                    live_watch = red.get('Tiktok Live', {}).get('Watch Live History', {}).get('WatchLiveMap', {})
+                    if live_watch:
+                        watch_times = [v.get('WatchTime') for v in live_watch.values() if v.get('WatchTime')]
+                        df_watch = pd.to_datetime(watch_times, format='%Y-%m-%d %H:%M:%S', errors='coerce')
+                        df_watch = df_watch.dropna()
+                        df_watch = pd.DataFrame({'timestamp': df_watch})
+                        df_watch['date'] = df_watch['timestamp'].dt.date
+                        st.metric('Total Live Sessions Watched', len(df_watch))
+                        watch_per_day = df_watch.groupby('date').size().rename('count')
+                        st.bar_chart(watch_per_day)
+                    else:
+                        st.info('No live watch history found for TikTok.')
+
+                    # Overall videos watched to end (from activity summary)
+                    summary = red.get('Your Activity', {}).get('Activity Summary', {}).get('ActivitySummaryMap', {})
+                    total_watched = summary.get('videosWatchedToTheEndSinceAccountRegistration')
+                    if total_watched is not None:
+                        st.metric('Total Videos Watched to End', total_watched)
+
+                    # Unique sounds (tags) in posts
+                    if not df_posts.empty and 'Sound' in df_posts.columns:
+                        unique_sounds = df_posts['Sound'].dropna().unique().tolist()
+                        st.subheader('Unique Sounds Used in Posts')
+                        st.write(unique_sounds)
         else:
             st.info('Agree to deletion & voluntary to proceed')
     else:
         st.info('Upload a JSON to begin')
-
 
 
 

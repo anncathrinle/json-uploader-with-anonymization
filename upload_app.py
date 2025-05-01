@@ -252,23 +252,23 @@ if not st.session_state['finalized']:
                         st.write(df_login['DeviceModel'].value_counts())
                         st.subheader('Network Types')
                         st.write(df_login['NetworkType'].value_counts())
-                        
-                                            # ——— New: quick login counts ———
-                    total_logins = len(df_login)
-                    wifi_count = (df_login['NetworkType'] == 'Wi-Fi').sum()
-                    non_wifi_count = total_logins - wifi_count
+                                # ——— Quick login counts ———
+                        total_logins = len(df_login)
+                        wifi_count = (df_login['NetworkType'] == 'Wi-Fi').sum()
+                        non_wifi_count = total_logins - wifi_count
 
-                    st.metric('Total Login Events', total_logins)
-                    st.metric('Wi-Fi Logins', wifi_count)
-                    st.metric('Non-Wi-Fi Logins', non_wifi_count)
+                        st.metric('Total Login Events', total_logins)
+                        st.metric('Wi-Fi Logins', wifi_count)
+                        st.metric('Non-Wi-Fi Logins', non_wifi_count)
 
-                    st.subheader('Logins by Network Type')
-                    st.bar_chart(
-                        pd.Series({
-                            'Wi-Fi': wifi_count,
-                            'Other': non_wifi_count
-                        })
-                    )
+                        st.subheader('Logins by Network Type')
+                        st.bar_chart(
+                            pd.Series({
+                                'Wi-Fi': wifi_count,
+                                'Other': non_wifi_count
+                            })
+                        )
+
 
                         # ——— New: IP geolocation & map ———
                         st.subheader("Where They Logged In From")

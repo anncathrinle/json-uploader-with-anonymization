@@ -153,73 +153,64 @@ if not st.session_state['finalized']:
                 st.session_state['finalized'] = True
                 st.success('Uploaded redacted JSON')
 
-                # Visualization for TikTok
+                # TikTok-specific data extraction
                 if platform == 'TikTok':
                     st.subheader('TikTok Usage Summary')
-                    watch_events = []
-                    def find_events(obj):
-                        if isinstance(obj, dict):
-                            if obj.get('actionType') == 'play' and obj.get('duration'):
-                                watch_events.append(obj)
-                            for v in obj.values():
-                                find_events(v)
-                        elif isinstance(obj, list):
-                            for item in obj:
-                                find_events(item)
-                    find_events(redacted)
-
-                    if watch_events:
-                        df = pd.DataFrame([
-                            {'timestamp': ev.get('timestamp'), 'duration': ev.get('duration', 0)}
-                            for ev in watch_events
-                        ])
-                        df['timestamp'] = pd.to_datetime(df['timestamp'])
-                        df['date'] = df['timestamp'].dt.date
-                        total_videos = len(df)
-                        total_time_min = df['duration'].sum() / 60
+                    # Locate the history array in TikTok export
+                    if isinstance(redacted, dict):
+                        for key in ['videoPlayHistory', 'playHistory', 'watchHistory']:
+                            if key in redacted and isinstance(redacted[key], list):
+                                history = redacted[key]
+                                break
+                        else:
+                            history = []
+                    else:
+                        history = redacted if isinstance(redacted, list) else []
+                    df_tt = pd.DataFrame(history)
+                    # Normalize timestamp field
+                    if 'createTime' in df_tt.columns:
+                        df_tt['timestamp'] = pd.to_datetime(df_tt['createTime'], errors='coerce')
+                    elif 'viewTime' in df_tt.columns:
+                        df_tt['timestamp'] = pd.to_datetime(df_tt['viewTime'], errors='coerce')
+                    elif 'timestamp' in df_tt.columns:
+                        df_tt['timestamp'] = pd.to_datetime(df_tt['timestamp'], errors='coerce')
+                    # Normalize duration field
+                    if 'duration' in df_tt.columns:
+                        df_tt['duration'] = pd.to_numeric(df_tt['duration'], errors='coerce')
+                    else:
+                        df_tt['duration'] = pd.to_numeric(df_tt.get('watchDuration', pd.Series()), errors='coerce')
+                    df_tt = df_tt.dropna(subset=['timestamp'])
+                    if not df_tt.empty:
+                        df_tt['date'] = df_tt['timestamp'].dt.date
+                        total_videos = len(df_tt)
+                        total_time_min = df_tt['duration'].sum() / 60
                         st.metric('Total Videos Watched', total_videos)
                         st.metric('Total Watch Time (min)', round(total_time_min, 2))
-
-                        usage = df.groupby('date')['duration'].sum().reset_index()
+                        usage = df_tt.groupby('date')['duration'].sum().reset_index()
                         usage['minutes'] = usage['duration'] / 60
                         usage = usage.rename(columns={'date': 'Date', 'minutes': 'Minutes Watched'})
                         st.line_chart(usage.set_index('Date'))
                     else:
                         st.info('No watch events found for TikTok.')
-        else:
-            st.info('Please agree to deletion & voluntariness to proceed')
-    else:
-        st.info('Upload a JSON to begin')
-        
-# Survey
-if st.session_state['finalized'] and not st.session_state['survey_submitted']:
-    choice=st.radio('Do you want to answer some optional research questions?',['Yes','No','I have already answered'])
-    if choice=='Yes':
-        st.markdown('*Please note that this is completely voluntary — there is no grade impact and since it is anonymized, it is unclear who participated.*')
-        q1=st.radio('Have you ever been active in a social movement?',['Yes','No'])
-        smf=smt=smtk=''
-        if q1=='Yes': smf=str(st.date_input('From when?')); smt=str(st.date_input('Until when?')); smtk=st.text_input('What movement?')
-        q2=st.radio('Have you ever participated in a protest?',['Yes','No'])
-        pf=pl=pr=''
-        if q2=='Yes': pf=str(st.date_input('When was your first protest?')); pl=str(st.date_input('When was your last protest?')); pr=st.text_area('Why did you join/stop?')
-        q3=st.text_area('Are there any posts you specifically remember?')
-        if st.button('Submit survey'):
-            survey={'anonymous_id':user_id,'platform':platform,'active_movement':q1,'movement_from':smf,'movement_until':smt,'movement_kind':smtk,'participated_protest':q2,'first_protest':pf,'last_protest':pl,'protest_reason':pr,'remembered_post':q3}
-            # upload survey
-            grp = 'research_donations' if st.session_state['donate'] else 'non_donations'
-            grp_id=get_or_create_folder(grp,ROOT_FOLDER_ID)
-            usr_id=get_or_create_folder(user_id,grp_id)
-            surv_id=get_or_create_folder('survey',usr_id)
-            buf=io.BytesIO(json.dumps(survey,indent=2).encode())
-            drive_service.files().create(body={'name':f'{user_id}_survey.json','parents':[surv_id]},media_body=MediaIoBaseUpload(buf,'application/json')).execute()
-            st.session_state['survey_submitted']=True
-            st.success('Survey saved')
-    else:
-        st.session_state['survey_submitted']=True
 
-# Thank-you
-if st.session_state['survey_submitted']:
-    st.subheader('Thank you! You can upload your data for other platforms via the sidebar.')
+                # Generic data analysis for all platforms
+                st.subheader(f"{platform} Data Summary")
+                df = pd.json_normalize(redacted)
+                st.write(f"Loaded {len(df)} records with {len(df.columns)} fields.")
+                st.dataframe(df.head())
+
+                # Top fields by non-null count
+                non_null_counts = df.count().sort_values(ascending=False)
+                st.subheader("Top 10 Fields by Non-Null Count")
+                st.bar_chart(non_null_counts.head(10))
+
+                # Activity over time if timestamp exists
+                if 'timestamp' in df.columns:
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+                    df['date'] = df['timestamp'].dt.date
+                    activity = df.groupby('date').size().rename('count').reset_index()
+                    st.subheader("Activity Over Time")
+                    st.line_chart(activity.set_index('date'))
 
 
 

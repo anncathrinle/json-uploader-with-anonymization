@@ -228,7 +228,7 @@ if not st.session_state['finalized']:
                         st.subheader('Unique Sounds Used in Posts')
                         st.write(unique_sounds)
 
-                    # Login history analysis
+                                        # Login history analysis
                     login_history = red.get('Login History', {}).get('LoginHistoryList', [])
                     df_login = pd.DataFrame(login_history)
                     if not df_login.empty:
@@ -241,33 +241,33 @@ if not st.session_state['finalized']:
                         st.write(df_login['DeviceModel'].value_counts())
                         st.subheader('Network Types')
                         st.write(df_login['NetworkType'].value_counts())
+
+                        # ——— New: IP geolocation & map ———
+                        st.subheader("Where They Logged In From")
+                        unique_ips = df_login['IP'].dropna().unique().tolist()
+                        locs = []
+                        token = st.secrets["ipinfo"]["token"]
+                        for ip in unique_ips:
+                            r = requests.get(f"https://ipinfo.io/{ip}/json?token={token}")
+                            if r.status_code == 200:
+                                js = r.json()
+                                if js.get("loc"):
+                                    lat, lon = map(float, js["loc"].split(","))
+                                    locs.append({
+                                        "lat": lat,
+                                        "lon": lon,
+                                        "ip": ip,
+                                        "city": js.get("city"),
+                                        "region": js.get("region")
+                                    })
+                        if locs:
+                            df_locs = pd.DataFrame(locs)
+                            st.map(df_locs[["lat", "lon"]])
+                            st.table(df_locs[["ip", "city", "region"]].drop_duplicates().reset_index(drop=True))
+                        else:
+                            st.info("No valid IP locations found.")
                     else:
                         st.info('No login history found for TikTok.')
-
-                    # ——— New: IP geolocation & map ———
-                    st.subheader("Where They Logged In From")
-                    unique_ips = df_login['IP'].dropna().unique().tolist()
-                    locs = []
-                    token = st.secrets["ipinfo"]["token"]
-                    for ip in unique_ips:
-                        r = requests.get(f"https://ipinfo.io/{ip}/json?token={token}")
-                        if r.status_code == 200:
-                            js = r.json()
-                            if js.get("loc"):
-                                lat, lon = map(float, js["loc"].split(","))
-                                locs.append({
-                                    "lat": lat,
-                                    "lon": lon,
-                                    "ip": ip,
-                                    "city": js.get("city"),
-                                    "region": js.get("region")
-                                })
-                    if locs:
-                        df_locs = pd.DataFrame(locs)
-                        st.map(df_locs[["lat", "lon"]])
-                        st.table(df_locs[["ip", "city", "region"]].drop_duplicates().reset_index(drop=True))
-                    else:
-                        st.info("No valid IP locations found.")
         else:
             st.info('Agree to deletion & voluntary to proceed')
     else:

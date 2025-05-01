@@ -216,17 +216,28 @@ if not st.session_state['finalized']:
                     else:
                         st.info('No live watch history found for TikTok.')
 
-                    # Overall videos watched to end (from activity summary)
+                                        # Overall videos watched to end (from activity summary)
                     summary = red.get('Your Activity', {}).get('Activity Summary', {}).get('ActivitySummaryMap', {})
                     total_watched = summary.get('videosWatchedToTheEndSinceAccountRegistration')
                     if total_watched is not None:
                         st.metric('Total Videos Watched to End', total_watched)
 
-                    # Unique sounds (tags) in posts
-                    if not df_posts.empty and 'Sound' in df_posts.columns:
-                        unique_sounds = df_posts['Sound'].dropna().unique().tolist()
-                        st.subheader('Unique Sounds Used in Posts')
-                        st.write(unique_sounds)
+                        # ——— New: plot videos-watched-to-end by day ———
+                        # (only works if you have a detailed watch-history list in your JSON)
+                        watch_history = red.get('Your Activity', {}) \
+                                          .get('Video Watch History', {}) \
+                                          .get('VideoWatchHistoryList', [])
+                        if watch_history:
+                            df_vh = pd.DataFrame(watch_history)
+                            # assume each record has a timestamp field called 'watchedAt' or similar
+                            ts_col = 'watchedAt' if 'watchedAt' in df_vh.columns else 'Date'
+                            df_vh['timestamp'] = pd.to_datetime(df_vh[ts_col], errors='coerce')
+                            df_vh['date'] = df_vh['timestamp'].dt.date
+                            watched_per_day = df_vh.groupby('date').size().rename('count')
+                            st.subheader('Videos Watched to End by Date')
+                            st.line_chart(watched_per_day)
+                        else:
+                            st.info('No detailed “Video Watch History” found to plot by date.')
 
                                         # Login history analysis
                     login_history = red.get('Login History', {}).get('LoginHistoryList', [])
@@ -241,6 +252,23 @@ if not st.session_state['finalized']:
                         st.write(df_login['DeviceModel'].value_counts())
                         st.subheader('Network Types')
                         st.write(df_login['NetworkType'].value_counts())
+                        
+                                            # ——— New: quick login counts ———
+                    total_logins = len(df_login)
+                    wifi_count = (df_login['NetworkType'] == 'Wi-Fi').sum()
+                    non_wifi_count = total_logins - wifi_count
+
+                    st.metric('Total Login Events', total_logins)
+                    st.metric('Wi-Fi Logins', wifi_count)
+                    st.metric('Non-Wi-Fi Logins', non_wifi_count)
+
+                    st.subheader('Logins by Network Type')
+                    st.bar_chart(
+                        pd.Series({
+                            'Wi-Fi': wifi_count,
+                            'Other': non_wifi_count
+                        })
+                    )
 
                         # ——— New: IP geolocation & map ———
                         st.subheader("Where They Logged In From")

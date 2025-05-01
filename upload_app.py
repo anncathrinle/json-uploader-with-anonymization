@@ -33,7 +33,7 @@ logging.getLogger('streamlit.ScriptRunner').setLevel(logging.ERROR)
 warnings.filterwarnings('ignore', message='missing ScriptRunContext')
 
 # Page configuration
-st.set_page_config(page_title='Social media data upload & anonymization tool', layout='wide')
+st.set_page_config(page_title='Social Media Data Upload & Anonymization Tool', layout='wide')
 
 # PII and platform-specific PII definitions
 COMMON_PII = {
@@ -63,7 +63,8 @@ def extract_keys(obj):
     if isinstance(obj, dict):
         for k, v in obj.items():
             sk = sanitize_key(k)
-            if not sk.isdigit(): keys.add(sk)
+            if not sk.isdigit():
+                keys.add(sk)
             keys |= extract_keys(v)
     elif isinstance(obj, list):
         for item in obj:
@@ -189,6 +190,7 @@ if not st.session_state['finalized']:
             st.info('Please agree to deletion & voluntariness to proceed')
     else:
         st.info('Upload a JSON to begin')
+        
 # Survey
 if st.session_state['finalized'] and not st.session_state['survey_submitted']:
     choice=st.radio('Do you want to answer some optional research questions?',['Yes','No','I have already answered'])

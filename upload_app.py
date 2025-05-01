@@ -35,6 +35,20 @@ warnings.filterwarnings('ignore', message='missing ScriptRunContext')
 # Page configuration
 st.set_page_config(page_title='Social media data upload & anonymization tool', layout='wide')
 
+# PII and platform-specific PII definitions
+COMMON_PII = {
+    'id', 'uuid', 'name', 'full_name', 'username', 'email', 'phone', 'device_id',
+    'ip_address', 'location', 'birthDate', 'created_at'
+}
+
+PLATFORMS = {
+    'TikTok': {'actionType', 'duration', 'timestamp', 'videoId'},
+    'Instagram': {'username', 'full_name', 'biography', 'profile_picture'},
+    'Facebook': {'name', 'birthday', 'gender'},
+    'Twitter': {'accountId', 'username', 'text', 'created_at'},
+    'Reddit': {'username', 'subreddit', 'body', 'created_utc'}
+}
+
 # Helper functions
 KEY_PATTERNS = [r'Chat History with .+', r'comments?:.*', r'replies?:.*', r'posts?:.*', r'story:.*']
 
@@ -83,10 +97,7 @@ user_id = st.session_state['user_id']
 # Sidebar info
 st.sidebar.markdown('---')
 st.sidebar.markdown(f"**Anonymous ID:** `{user_id}`")
-st.sidebar.write('DISCLAIMER: Please save this ID...')
-
-# PII definitions and platforms omitted for brevity (same as original)
-# ...
+st.sidebar.write('DISCLAIMER: Please save this ID in case you want to manage or delete your data later.')
 
 # Ensure Drive
 if not (drive_service and ROOT_FOLDER_ID):
@@ -100,7 +111,6 @@ st.title('Social Media JSON Uploader')
 # File upload
 uploaded = st.file_uploader(f'Upload {platform} JSON', type='json')
 
-# Main flow
 if not st.session_state['finalized']:
     if uploaded:
         raw = uploaded.read()
@@ -113,11 +123,11 @@ if not st.session_state['finalized']:
         except:
             data = [json.loads(line) for line in text.splitlines() if line.strip()]
 
-        # Redaction UI
-        st.write('**Consents**')
+        # Consent & Redaction
+        st.write('**Consents & Redaction**')
         st.session_state['donate'] = st.checkbox('Donate anonymized data')
         delete_ok = st.checkbox('Agree to deletion policy')
-        voluntary = st.checkbox('I understand this is voluntary')
+        voluntary = st.checkbox('I understand participation is voluntary')
         extras = st.multiselect('Additional keys to redact', sorted(extract_keys(data)))
 
         if delete_ok and voluntary:
@@ -126,6 +136,7 @@ if not st.session_state['finalized']:
                 st.json(redacted)
                 fname = f"{user_id}_{platform}_{uploaded.name}".replace('.json.json', '.json')
                 st.download_button('Download Redacted JSON', data=json.dumps(redacted, indent=2), file_name=fname)
+
             if st.button('Finalize and upload'):
                 grp = 'research_donations' if st.session_state['donate'] else 'non_donations'
                 grp_id = get_or_create_folder(grp, ROOT_FOLDER_ID)
@@ -144,11 +155,10 @@ if not st.session_state['finalized']:
                 # Visualization for TikTok
                 if platform == 'TikTok':
                     st.subheader('TikTok Usage Summary')
-                    # Recursively find watch/play events
                     watch_events = []
                     def find_events(obj):
                         if isinstance(obj, dict):
-                            if obj.get('actionType') == 'play' and 'duration' in obj:
+                            if obj.get('actionType') == 'play' and obj.get('duration'):
                                 watch_events.append(obj)
                             for v in obj.values():
                                 find_events(v)
@@ -158,27 +168,27 @@ if not st.session_state['finalized']:
                     find_events(redacted)
 
                     if watch_events:
-                        durations = [e.get('duration', 0) for e in watch_events]
-                        timestamps = [e.get('timestamp') for e in watch_events]
-                        df = pd.DataFrame({'timestamp': pd.to_datetime(timestamps), 'duration': durations})
+                        df = pd.DataFrame([
+                            {'timestamp': ev.get('timestamp'), 'duration': ev.get('duration', 0)}
+                            for ev in watch_events
+                        ])
+                        df['timestamp'] = pd.to_datetime(df['timestamp'])
                         df['date'] = df['timestamp'].dt.date
                         total_videos = len(df)
                         total_time_min = df['duration'].sum() / 60
                         st.metric('Total Videos Watched', total_videos)
                         st.metric('Total Watch Time (min)', round(total_time_min, 2))
 
-                        # Usage over time
                         usage = df.groupby('date')['duration'].sum().reset_index()
-                        usage['minute'] = usage['duration'] / 60
-                        usage = usage.rename(columns={'date': 'Date', 'minute': 'Minutes Watched'})
+                        usage['minutes'] = usage['duration'] / 60
+                        usage = usage.rename(columns={'date': 'Date', 'minutes': 'Minutes Watched'})
                         st.line_chart(usage.set_index('Date'))
                     else:
                         st.info('No watch events found for TikTok.')
         else:
-            st.info('Agree to policies to proceed')
+            st.info('Please agree to deletion & voluntariness to proceed')
     else:
         st.info('Upload a JSON to begin')
-
 # Survey
 if st.session_state['finalized'] and not st.session_state['survey_submitted']:
     choice=st.radio('Do you want to answer some optional research questions?',['Yes','No','I have already answered'])

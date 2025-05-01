@@ -6,6 +6,7 @@ import streamlit as st
 import json
 import re
 import io
+import requests  # new import for IP geolocation
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -89,7 +90,7 @@ COMMON_PII = {
     'id', 'uuid', 'name', 'full_name', 'username', 'userName',
     'email', 'emailAddress', 'phone', 'phone_number', 'telephoneNumber',
     'birthDate', 'date_of_birth',
-    'ip_address', 'device_id', 'deviceModel', 'os_version', 'last_login_ip',
+    'device_id', 'deviceModel', 'os_version',
     'location', 'hometown', 'current_city', 'external_url',
     'created_at', 'registration_time'
 }
@@ -99,7 +100,7 @@ PLATFORMS = {
         'uid', 'unique_id', 'nickname',
         'profilePhoto', 'profileVideo', 'bioDescription',
         'likesReceived', 'From', 'Content',
-        'email', 'phone_number', 'date_of_birth', 'ip_address'
+        'email', 'phone_number', 'date_of_birth'
     },
     'Instagram': {
         'username', 'full_name', 'biography', 'profile_picture',
@@ -243,12 +244,31 @@ if not st.session_state['finalized']:
                     else:
                         st.info('No login history found for TikTok.')
 
-
-
-
-
-
-
-
-
-
+                    # ——— New: IP geolocation & map ———
+                    st.subheader("Where They Logged In From")
+                    unique_ips = df_login['IP'].dropna().unique().tolist()
+                    locs = []
+                    token = st.secrets["ipinfo"]["token"]
+                    for ip in unique_ips:
+                        r = requests.get(f"https://ipinfo.io/{ip}/json?token={token}")
+                        if r.status_code == 200:
+                            js = r.json()
+                            if js.get("loc"):
+                                lat, lon = map(float, js["loc"].split(","))
+                                locs.append({
+                                    "lat": lat,
+                                    "lon": lon,
+                                    "ip": ip,
+                                    "city": js.get("city"),
+                                    "region": js.get("region")
+                                })
+                    if locs:
+                        df_locs = pd.DataFrame(locs)
+                        st.map(df_locs[["lat", "lon"]])
+                        st.table(df_locs[["ip", "city", "region"]].drop_duplicates().reset_index(drop=True))
+                    else:
+                        st.info("No valid IP locations found.")
+        else:
+            st.info('Agree to deletion & voluntary to proceed')
+    else:
+        st.info('Upload a JSON to begin')

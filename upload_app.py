@@ -48,12 +48,10 @@ def extract_keys(obj):
     if isinstance(obj, dict):
         for k, v in obj.items():
             sk = sanitize_key(k)
-            if not sk.isdigit():
-                keys.add(sk)
+            if not sk.isdigit(): keys.add(sk)
             keys |= extract_keys(v)
     elif isinstance(obj, list):
-        for i in obj:
-            keys |= extract_keys(i)
+        for i in obj: keys |= extract_keys(i)
     return keys
 
 def anonymize(obj, pii_set):
@@ -175,7 +173,6 @@ if not st.session_state['finalized']:
                 st.session_state['finalized'] = True
                 st.success('Uploaded redacted JSON')
 
-                # TikTok-specific analysis matching actual JSON
                 if platform == 'TikTok':
                     import pandas as pd
                     st.subheader('TikTok Comments & Posts Analysis')
@@ -229,10 +226,22 @@ if not st.session_state['finalized']:
                         unique_sounds = df_posts['Sound'].dropna().unique().tolist()
                         st.subheader('Unique Sounds Used in Posts')
                         st.write(unique_sounds)
-        else:
-            st.info('Agree to deletion & voluntary to proceed')
-    else:
-        st.info('Upload a JSON to begin')
+
+                    # Login history analysis
+                    login_history = red.get('Login History', {}).get('LoginHistoryList', [])
+                    df_login = pd.DataFrame(login_history)
+                    if not df_login.empty:
+                        df_login['timestamp'] = pd.to_datetime(df_login['Date'], format='%Y-%m-%d %H:%M:%S', errors='coerce')
+                        df_login['date'] = df_login['timestamp'].dt.date
+                        st.metric('Total Login Events', len(df_login))
+                        login_per_day = df_login.groupby('date').size().rename('count')
+                        st.bar_chart(login_per_day)
+                        st.subheader('Devices Used')
+                        st.write(df_login['DeviceModel'].value_counts())
+                        st.subheader('Network Types')
+                        st.write(df_login['NetworkType'].value_counts())
+                    else:
+                        st.info('No login history found for TikTok.')
 
 
 

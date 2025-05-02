@@ -34,8 +34,28 @@ if not (drive_service and ROOT_FOLDER_ID):
 
 # --- Helpers ---
 KEY_PATTERNS = [r'Chat History with .+', r'comments?:.*', r'replies?:.*', r'posts?:.*', r'story:.*']
-COMMON_PII = {...}  # (as before)
-PLATFORMS = {...}   # (as before)
+COMMON_PII = {
+    'id', 'uuid', 'name', 'full_name', 'username', 'userName',
+    'email', 'emailAddress', 'phone', 'phone_number', 'telephoneNumber',
+    'birthDate', 'date_of_birth',
+    'device_id', 'deviceModel', 'os_version',
+    'location', 'hometown', 'current_city', 'external_url',
+    'created_at', 'registration_time'
+}
+PLATFORMS = {
+    'TikTok': {'uid', 'unique_id', 'nickname', 'profilePhoto', 'profileVideo', 'bioDescription',
+               'likesReceived', 'From', 'Content', 'email', 'phone_number', 'date_of_birth'},
+    'Instagram': {'username', 'full_name', 'biography', 'profile_picture', 'email',
+                  'phone_number', 'gender', 'birthday', 'external_url', 'account_creation_date'},
+    'Facebook': {'name', 'birthday', 'gender', 'relationship_status', 'hometown',
+                 'current_city', 'emails', 'phones', 'friend_count', 'friends', 'posts',
+                 'story', 'comments', 'likes'},
+    'Twitter': {'accountId', 'username', 'accountDisplayName', 'description', 'website',
+                'location', 'avatarMediaUrl', 'headerMediaUrl', 'email',
+                'in_reply_to_user_id', 'source', 'retweet_count', 'favorite_count'},
+    'Reddit': {'username', 'email', 'karma', 'subreddit', 'author', 'body',
+               'selftext', 'post_id', 'title', 'created_utc', 'ip_address'}
+}
 
 def sanitize_key(k):
     for pat in KEY_PATTERNS:
@@ -43,7 +63,26 @@ def sanitize_key(k):
             return k.split(':',1)[0].title()
     return k.rstrip(':')
 
-# (extract_keys and anonymize as before)
+def extract_keys(obj):
+    keys = set()
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            sk = sanitize_key(k)
+            if not sk.isdigit():
+                keys.add(sk)
+            keys |= extract_keys(v)
+    elif isinstance(obj, list):
+        for i in obj:
+            keys |= extract_keys(i)
+    return keys
+
+def anonymize(obj, pii_set):
+    if isinstance(obj, dict):
+        return {sanitize_key(k): ('REDACTED' if sanitize_key(k) in pii_set else anonymize(v, pii_set))
+                for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [anonymize(i, pii_set) for i in obj]
+    return obj
 
 def get_or_create_folder(name, parent_id):
     query = f"mimeType='application/vnd.google-apps.folder' and name='{name}' and '{parent_id}' in parents"
@@ -116,7 +155,6 @@ if delete_ok:
                 df_c['date'] = df_c['timestamp'].dt.date
                 st.metric('Total Comments', len(df_c))
                 st.line_chart(df_c.groupby('date').size().rename('count'))
-                # new: average comment length
                 df_c['length'] = df_c['comment'].str.len()
                 st.metric('Avg. Comment Length', round(df_c['length'].mean(), 1))
 
@@ -137,14 +175,13 @@ if delete_ok:
                 st.subheader('Top Hashtags')
                 st.bar_chart(top)
 
-        # --- Generic time-series for lists in red ---
         else:
             for section, content in red.items():
                 if isinstance(content, dict):
                     for key, block in content.items():
                         if isinstance(block, list) and block:
                             df = pd.DataFrame(block)
-                            date_col = next((c for c in df.columns if c.lower() in ['date','timestamp','date'], None), None)
+                            date_col = next((c for c in df.columns if c.lower() in ['date','timestamp']), None)
                             if date_col:
                                 df['ts'] = pd.to_datetime(df[date_col], errors='coerce')
                                 df = df.dropna(subset=['ts'])
@@ -155,5 +192,6 @@ if delete_ok:
         st.info('Analysis complete. Add more modules as desired.')
 else:
     st.info('Please agree to proceed.')
+
 
 

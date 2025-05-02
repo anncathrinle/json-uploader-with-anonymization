@@ -148,6 +148,7 @@ if delete_ok:
 
         # --- TikTok Analytics ---
         if platform == 'TikTok':
+            # Comments Analysis
             comments = red.get('Comment', {}).get('Comments', {}).get('CommentsList', []) or []
             df_c = pd.DataFrame(comments)
             if not df_c.empty and 'date' in df_c.columns:
@@ -158,6 +159,7 @@ if delete_ok:
                 df_c['length'] = df_c['comment'].str.len()
                 st.metric('Avg. Comment Length', round(df_c['length'].mean(), 1))
 
+            # Posts Analysis
             posts = red.get('Post', {}).get('Posts', {}).get('VideoList', []) or []
             df_p = pd.DataFrame(posts)
             if not df_p.empty and 'Date' in df_p.columns:
@@ -166,8 +168,9 @@ if delete_ok:
                 df_p['Likes'] = pd.to_numeric(df_p['Likes'], errors='coerce')
                 st.metric('Avg. Likes per Post', round(df_p['Likes'].mean(), 1))
                 st.bar_chart(df_p.set_index('timestamp')['Likes'].resample('W').mean())
-                st.table(df_p.nlargest(3, 'Likes')[['Date','Likes','Link']])
+                st.table(df_p.nlargest(3, 'Likes')[['Date', 'Likes', 'Link']])
 
+            # Hashtag Analysis
             hashtags = red.get('Hashtag', {}).get('HashtagList', []) or []
             if hashtags:
                 df_h = pd.DataFrame(hashtags)
@@ -175,13 +178,31 @@ if delete_ok:
                 st.subheader('Top Hashtags')
                 st.bar_chart(top)
 
+            # Login History Analysis
+            login_history = red.get('Login History', {}).get('LoginHistoryList', []) or []
+            total_logins = len(login_history)
+            wifi_logins = sum(1 for e in login_history if e.get('NetworkType') == 'Wi-Fi')
+            non_wifi_logins = total_logins - wifi_logins
+            st.metric('Total Login Events', total_logins)
+            st.metric('Wi-Fi Logins', wifi_logins)
+            st.metric('Non-Wi-Fi Logins', non_wifi_logins)
+            if total_logins:
+                df_l = pd.DataFrame(login_history)
+                date_field = 'Date' if 'Date' in df_l.columns else next((c for c in df_l.columns if c.lower() == 'date'), None)
+                if date_field:
+                    df_l['timestamp'] = pd.to_datetime(df_l[date_field], errors='coerce')
+                    df_l['date'] = df_l['timestamp'].dt.date
+                    st.subheader('Logins per Day')
+                    st.bar_chart(df_l.groupby('date').size().rename('count'))
+
         else:
+            # Generic time-series for other platforms
             for section, content in red.items():
                 if isinstance(content, dict):
                     for key, block in content.items():
                         if isinstance(block, list) and block:
                             df = pd.DataFrame(block)
-                            date_col = next((c for c in df.columns if c.lower() in ['date','timestamp']), None)
+                            date_col = next((c for c in df.columns if c.lower() in ['date', 'timestamp']), None)
                             if date_col:
                                 df['ts'] = pd.to_datetime(df[date_col], errors='coerce')
                                 df = df.dropna(subset=['ts'])
@@ -192,6 +213,7 @@ if delete_ok:
         st.info('Analysis complete. Add more modules as desired.')
 else:
     st.info('Please agree to proceed.')
+
 
 
 

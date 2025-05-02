@@ -11,12 +11,6 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-# --- Optional word cloud dependency ---
-try:
-    from wordcloud import WordCloud
-except ImportError:
-    WordCloud = None
-
 # --- Configuration ---
 logging.getLogger('streamlit.ScriptRunner').setLevel(logging.ERROR)
 warnings.filterwarnings('ignore', message='missing ScriptRunContext')
@@ -159,7 +153,28 @@ if delete_ok:
 
         # --- TikTok Analytics ---
         if platform == 'TikTok':
-            # Comments Analysis ... [existing code] ...
+            # Comments Analysis
+            comments = red.get('Comment', {}).get('Comments', {}).get('CommentsList', []) or []
+            df_c = pd.DataFrame(comments)
+            if not df_c.empty and 'date' in df_c.columns:
+                df_c['timestamp'] = pd.to_datetime(df_c['date'], errors='coerce')
+                df_c['date'] = df_c['timestamp'].dt.date
+                st.metric('Total Comments', len(df_c))
+                st.line_chart(df_c.groupby('date').size().rename('count'))
+                df_c['length'] = df_c['comment'].str.len()
+                st.metric('Avg. Comment Length', round(df_c['length'].mean(), 1))
+                # Activity by Weekday
+                df_c['weekday'] = df_c['timestamp'].dt.day_name()
+                st.subheader('Comments by Weekday')
+                st.bar_chart(df_c['weekday'].value_counts())
+                # Semantic: Top Comment Words
+                words = [w.lower() for text in df_c['comment'].dropna() for w in re.findall(r"\b\w+\b", text)]
+                words = [w for w in words if w not in COMMON_STOPWORDS and len(w) > 3]
+                top = pd.Series(words).value_counts().head(10)
+                if not top.empty:
+                    st.subheader('Top Comment Words')
+                    st.bar_chart(top)
+
             # Posts Analysis
             posts = red.get('Post', {}).get('Posts', {}).get('VideoList', []) or []
             df_p = pd.DataFrame(posts)
@@ -182,15 +197,48 @@ if delete_ok:
                         topic_likes.append({'topic': kw, 'avg_likes': round(avg_like,1)})
                     st.subheader('Average Likes per Topic')
                     st.table(pd.DataFrame(topic_likes))
+            # Hashtag Analysis
+            hashtags = red.get('Hashtag', {}).get('HashtagList', []) or []
+            if hashtags:
+                df_h = pd.DataFrame(hashtags)
+                top_h = df_h['HashtagName'].value_counts().head(5)
+                st.subheader('Top Hashtags')
+                st.bar_chart(top_h)
 
-            # ... rest of code ...
+            # Video Watch Analysis
+            summary = red.get('Your Activity', {}).get('Activity Summary', {}).get('ActivitySummaryMap', {}) or {}
+            total_watched = summary.get('videosWatchedToTheEndSinceAccountRegistration')
+            if total_watched is not None:
+                st.metric('Total Videos Watched to End', total_watched)
+            watch_history = red.get('Your Activity', {}).get('Video Watch History', {}).get('VideoWatchHistoryList', []) or []
+            st.metric('Video Watch Events', len(watch_history))
+            if watch_history:
+                df_w = pd.DataFrame(watch_history)
+                ts_col = next((c for c in df_w.columns if 'date' in c.lower() or 'time' in c.lower()), None)
+                if ts_col:
+                    df_w['ts'] = pd.to_datetime(df_w[ts_col], errors='coerce')
+                    df_w['hour'] = df_w['ts'].dt.hour
+                    st.subheader('Video Watches by Hour')
+                    st.bar_chart(df_w['hour'].value_counts().sort_index())
 
-        # Generic panel for other platforms ...
+        else:
+            # Generic time-series for other platforms
+            for section, content in red.items():
+                if isinstance(content, dict):
+                    for key, block in content.items():
+                        if isinstance(block, list) and block:
+                            df = pd.DataFrame(block)
+                            date_col = next((c for c in df.columns if c.lower() in ['date', 'timestamp']), None)
+                            if date_col:
+                                df['ts'] = pd.to_datetime(df[date_col], errors='coerce')
+                                df = df.dropna(subset=['ts'])
+                                ts = df.groupby(df['ts'].dt.date).size().rename('count')
+                                st.subheader(f'{section} - {key} per Day')
+                                st.line_chart(ts)
 
         st.info('Analysis complete. Add more modules as desired.')
 else:
     st.info('Please agree to proceed.')
-
 
 
 

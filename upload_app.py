@@ -48,18 +48,18 @@ COMMON_PII = {'id','uuid','name','full_name','username','userName','email','emai
               'device_id','deviceModel','os_version','location','hometown','current_city',
               'external_url','created_at','registration_time'}
 PLATFORMS = {
-    'TikTok': {'uid', 'unique_id', 'nickname', 'profilePhoto', 'profileVideo', 'bioDescription',
-               'likesReceived', 'From', 'Content', 'email', 'phone_number', 'date_of_birth'},
-    'Instagram': {'username', 'full_name', 'biography', 'profile_picture', 'email',
-                  'phone_number', 'gender', 'birthday', 'external_url', 'account_creation_date'},
-    'Facebook': {'name', 'birthday', 'gender', 'relationship_status', 'hometown',
-                 'current_city', 'emails', 'phones', 'friend_count', 'friends', 'posts',
-                 'story', 'comments', 'likes'},
-    'Twitter': {'accountId', 'username', 'accountDisplayName', 'description', 'website',
-                'location', 'avatarMediaUrl', 'headerMediaUrl', 'email',
-                'in_reply_to_user_id', 'source', 'retweet_count', 'favorite_count'},
-    'Reddit': {'username', 'email', 'karma', 'subreddit', 'author', 'body',
-               'selftext', 'post_id', 'title', 'created_utc', 'ip_address'}
+    'TikTok': {'uid','unique_id','nickname','profilePhoto','profileVideo','bioDescription',
+               'likesReceived','From','Content','email','phone_number','date_of_birth'},
+    'Instagram': {'username','full_name','biography','profile_picture','email',
+                  'phone_number','gender','birthday','external_url','account_creation_date'},
+    'Facebook': {'name','birthday','gender','relationship_status','hometown',
+                 'current_city','emails','phones','friend_count','friends','posts',
+                 'story','comments','likes'},
+    'Twitter': {'accountId','username','accountDisplayName','description','website',
+                'location','avatarMediaUrl','headerMediaUrl','email',
+                'in_reply_to_user_id','source','retweet_count','favorite_count'},
+    'Reddit': {'username','email','karma','subreddit','author','body',
+               'selftext','post_id','title','created_utc','ip_address'}
 }
 
 def sanitize_key(k):
@@ -69,163 +69,162 @@ def sanitize_key(k):
     return k.rstrip(':')
 
 def extract_keys(obj):
-    keys = set()
+    keys=set()
     if isinstance(obj, dict):
-        for k, v in obj.items():
-            sk = sanitize_key(k)
+        for k,v in obj.items():
+            sk=sanitize_key(k)
             if not sk.isdigit(): keys.add(sk)
             keys |= extract_keys(v)
     elif isinstance(obj, list):
         for i in obj: keys |= extract_keys(i)
     return keys
 
-def anonymize(obj, pii_set):
+def anonymize(obj,ppi_set):
     if isinstance(obj, dict):
-        return {sanitize_key(k): ('REDACTED' if sanitize_key(k) in pii_set else anonymize(v, pii_set))
-                for k, v in obj.items()}
-    if isinstance(obj, list): return [anonymize(i, pii_set) for i in obj]
+        return {sanitize_key(k):('REDACTED' if sanitize_key(k) in ppi_set else anonymize(v,ppi_set))
+                for k,v in obj.items()}
+    if isinstance(obj, list): return [anonymize(i,ppi_set) for i in obj]
     return obj
 
-def get_folder(name, parent):
-    query = f"mimeType='application/vnd.google-apps.folder' and name='{name}' and '{parent}' in parents"
-    resp = drive_service.files().list(q=query, fields='files(id)').execute()
-    files = resp.get('files', [])
+def get_folder(name,parent):
+    q=f"mimeType='application/vnd.google-apps.folder' and name='{name}' and '{parent}' in parents"
+    resp=drive_service.files().list(q=q,fields='files(id)').execute()
+    files=resp.get('files',[])
     if files: return files[0]['id']
-    meta = {'name': name, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [parent]}
-    return drive_service.files().create(body=meta, fields='id').execute()['id']
+    meta={'name':name,'mimeType':'application/vnd.google-apps.folder','parents':[parent]}
+    return drive_service.files().create(body=meta,fields='id').execute()['id']
 
 # Session state
-st.session_state.setdefault('user_id', uuid.uuid4().hex[:8])
-st.session_state.setdefault('finalized', False)
-st.session_state.setdefault('donate', False)
-user_id = st.session_state['user_id']
+st.session_state.setdefault('user_id',uuid.uuid4().hex[:8])
+st.session_state.setdefault('finalized',False)
+st.session_state.setdefault('donate',False)
+user_id=st.session_state['user_id']
 
 # Sidebar
 st.sidebar.markdown('---')
 st.sidebar.markdown(f"**Anonymous ID:** `{user_id}`")
 st.sidebar.write('Save this ID to manage or delete data later.')
-platform = st.sidebar.selectbox('Platform', list(PLATFORMS.keys()))
+platform=st.sidebar.selectbox('Platform',list(PLATFORMS.keys()))
 st.title('Social Media JSON Uploader')
 
 # Upload
-uploaded = st.file_uploader(f'Upload {platform} JSON', type='json')
+uploaded=st.file_uploader(f'Upload {platform} JSON',type='json')
 if not uploaded:
     st.info('Upload a JSON to begin')
     st.stop()
 
-# Load & redact
-raw = uploaded.read()
-text = raw.decode('utf-8-sig', errors='replace')
-try: data = json.loads(text)
-except: data = [json.loads(l) for l in text.splitlines()]
+# Load & Redact
+raw=uploaded.read()
+text=raw.decode('utf-8-sig',errors='replace')
+try:data=json.loads(text)
+except:data=[json.loads(l) for l in text.splitlines()]
 
-st.session_state['donate'] = st.checkbox('Donate anonymized data for research')
-delete_ok = st.checkbox('I understand deletion & saved ID')
+st.session_state['donate']=st.checkbox('Donate anonymized data for research')
+delete_ok=st.checkbox('I understand deletion & saved ID')
 if not delete_ok:
     st.info('Please agree to proceed.')
     st.stop()
-extras = st.multiselect('Additional redact keys', sorted(extract_keys(data)))
-red = anonymize(data, COMMON_PII.union(PLATFORMS[platform]).union(set(extras)))
+extras=st.multiselect('Additional redact keys',sorted(extract_keys(data)))
+red=anonymize(data,COMMON_PII.union(PLATFORMS[platform]).union(extras))
 with st.expander('Preview Redacted Data'): st.json(red)
-fname = f"{user_id}_{platform}_{uploaded.name}".replace('.json.json', '.json')
-st.download_button('Download Redacted JSON', data=json.dumps(red, indent=2), file_name=fname)
+fname=f"{user_id}_{platform}_{uploaded.name}".replace('.json.json','.json')
+st.download_button('Download Redacted JSON',data=json.dumps(red,indent=2),file_name=fname)
 if st.button('Finalize & upload'):
-    grp = 'research_donations' if st.session_state['donate'] else 'non_donations'
-    gid = get_folder(grp, ROOT_FOLDER_ID)
-    uid = get_folder(user_id, gid)
-    pid = get_folder(platform, uid)
-    rid = get_folder('redacted', pid)
-    buf = io.BytesIO(json.dumps(red, indent=2).encode())
-    drive_service.files().create(body={'name': fname, 'parents': [rid]}, media_body=MediaIoBaseUpload(buf, 'application/json')).execute()
+    grp='research_donations' if st.session_state['donate'] else 'non_donations'
+    gid=get_folder(grp,ROOT_FOLDER_ID)
+    uid=get_folder(user_id,gid)
+    pid=get_folder(platform,uid)
+    rid=get_folder('redacted',pid)
+    buf=io.BytesIO(json.dumps(red,indent=2).encode())
+    drive_service.files().create(body={'name':fname,'parents':[rid]},media_body=MediaIoBaseUpload(buf,'application/json')).execute()
     st.success('Uploaded')
     st.subheader(f'{platform} Analytics')
     
     # TikTok Analytics
-    if platform == 'TikTok':
-        # Comments
-        cmts = red.get('Comment', {}).get('Comments', {}).get('CommentsList', []) or []
-        dfc = pd.DataFrame(cmts)
+    if platform=='TikTok':
+        cmts=red.get('Comment',{}).get('Comments',{}).get('CommentsList',[]) or []
+        dfc=pd.DataFrame(cmts)
         if not dfc.empty:
-            dfc['ts'] = pd.to_datetime(dfc['date'], errors='coerce')
-            dfc['date'] = dfc['ts'].dt.date
-            st.metric('Total Comments', len(dfc))
+            dfc['ts']=pd.to_datetime(dfc['date'],errors='coerce')
+            dfc['date']=dfc['ts'].dt.date
+            st.metric('Total Comments',len(dfc))
+            st.subheader('Comments Over Time')
             st.line_chart(dfc.groupby('date').size().rename('count'))
-            dfc['length'] = dfc['comment'].str.len()
-            st.metric('Avg. Comment Length', round(dfc['length'].mean(),1))
-            dfc['weekday'] = dfc['ts'].dt.day_name()
+            st.subheader('Comment Length Distribution')
+            st.metric('Avg Comment Length',round(dfc['comment'].str.len().mean(),1))
+            dfc['weekday']=dfc['ts'].dt.day_name()
+            st.subheader('Comments by Weekday')
             st.bar_chart(dfc['weekday'].value_counts())
-            # Word frequency & cloud
-            words = [w.lower() for txt in dfc['comment'].dropna() for w in re.findall(r"\b\w+\b", txt)]
-            words = [w for w in words if w not in COMMON_STOPWORDS and len(w) > 3]
-            wf = pd.Series(words).value_counts().head(10)
-            st.bar_chart(wf)
+            words=[w.lower() for txt in dfc['comment'].dropna() for w in re.findall(r"\b\w+\b",txt)]
+            words=[w for w in words if w not in COMMON_STOPWORDS and len(w)>3]
+            st.subheader('Top Comment Words')
+            st.bar_chart(pd.Series(words).value_counts().head(10))
             if WordCloud:
-                wc = WordCloud(width=400, height=200, background_color='white').generate(' '.join(dfc['comment'].dropna()))
+                wc=WordCloud(width=400,height=200,background_color='white').generate(' '.join(dfc['comment'].dropna()))
                 st.subheader('Comment Word Cloud')
-                st.image(wc.to_array(), use_column_width=True)
-        # Posts
-        posts = red.get('Post', {}).get('Posts', {}).get('VideoList', []) or []
-        dfp = pd.DataFrame(posts)
+                st.image(wc.to_array(),use_column_width=True)
+        posts=red.get('Post',{}).get('Posts',{}).get('VideoList',[]) or []
+        dfp=pd.DataFrame(posts)
         if not dfp.empty:
-            dfp['ts'] = pd.to_datetime(dfp['Date'], errors='coerce')
-            dfp['Likes'] = pd.to_numeric(dfp['Likes'], errors='coerce')
-            st.metric('Total Posts', len(dfp))
-            st.metric('Avg Likes/Post', round(dfp['Likes'].mean(),1))
+            dfp['ts']=pd.to_datetime(dfp['Date'],errors='coerce')
+            dfp['Likes']=pd.to_numeric(dfp['Likes'],errors='coerce')
+            st.metric('Total Posts',len(dfp))
+            st.subheader('Weekly Likes Trend')
             st.bar_chart(dfp.set_index('ts')['Likes'].resample('W').mean())
-            st.table(dfp.nlargest(3,'Likes')[['Date','Likes','Link']])
-            dfp['hour'] = dfp['ts'].dt.hour
+            st.subheader('Posts by Hour of Day')
+            dfp['hour']=dfp['ts'].dt.hour
             st.bar_chart(dfp['hour'].value_counts().sort_index())
             if not dfc.empty:
-                st.metric('Comments per Post', round(len(dfc)/len(dfp),2))
-            txtcol = next((c for c in dfp.columns if c.lower() in ['desc','description','caption','content']), None)
+                st.metric('Comments per Post',round(len(dfc)/len(dfp),2))
+            txtcol=next((c for c in dfp.columns if c.lower() in ['desc','description','caption','content']),None)
             if txtcol:
-                # Word freq & cloud for posts
-                wp = [w.lower() for txt in dfp[txtcol].dropna() for w in re.findall(r"\b\w+\b", txt)]
-                wp = [w for w in wp if w not in COMMON_STOPWORDS and len(w) > 3]
-                wfp = pd.Series(wp).value_counts().head(10)
-                st.bar_chart(wfp)
+                words_p=[w.lower() for txt in dfp[txtcol].dropna() for w in re.findall(r"\b\w+\b",txt)]
+                words_p=[w for w in words_p if w not in COMMON_STOPWORDS and len(w)>3]
+                st.subheader('Top Post Words')
+                st.bar_chart(pd.Series(words_p).value_counts().head(10))
                 if WordCloud:
-                    wc2 = WordCloud(width=400, height=200, background_color='white').generate(' '.join(dfp[txtcol].dropna()))
+                    wc2=WordCloud(width=400,height=200,background_color='white').generate(' '.join(dfp[txtcol].dropna()))
                     st.subheader('Post Word Cloud')
-                    st.image(wc2.to_array(), use_column_width=True)
-                # Average Likes per Topic
-                topics = pd.Series(wp).value_counts().head(5).index.tolist()
-                tl = []
-                for kw in topics:
-                    mask = dfp[txtcol].str.contains(fr"\b{kw}\b", case=False, na=False)
-                    tl.append({'topic': kw, 'avg_likes': round(dfp.loc[mask,'Likes'].mean(),1)})
+                    st.image(wc2.to_array(),use_column_width=True)
+                # Avg Likes per Topic
+                topics=pd.Series(words_p).value_counts().head(5).index.tolist()
+                tl=[{'topic':kw,'avg_likes':round(dfp[dfp[txtcol].str.contains(fr"\b{kw}\b",case=False,na=False)]['Likes'].mean(),1)} for kw in topics]
                 st.subheader('Average Likes per Topic')
                 st.table(pd.DataFrame(tl))
-        # Hashtags
-        tags = red.get('Hashtag', {}).get('HashtagList', []) or []
-        dfh = pd.DataFrame(tags)
+        tags=red.get('Hashtag',{}).get('HashtagList',[]) or []
+        dfh=pd.DataFrame(tags)
         if not dfh.empty:
+            st.subheader('Top Hashtags')
             st.bar_chart(dfh['HashtagName'].value_counts().head(5))
-        # Video Watches
-        sumry = red.get('Your Activity', {}).get('Activity Summary', {}).get('ActivitySummaryMap', {}) or {}
-        tw = sumry.get('videosWatchedToTheEndSinceAccountRegistration')
-        if tw is not None:
-            st.metric('Total Videos Watched', tw)
-        wh = red.get('Your Activity', {}).get('Video Watch History', {}).get('VideoWatchHistoryList', []) or []
+        sumry=red.get('Your Activity',{}).get('Activity Summary',{}).get('ActivitySummaryMap',{}) or {}
+        tw=sumry.get('videosWatchedToTheEndSinceAccountRegistration')
+        if tw is not None: st.metric('Total Videos Watched',tw)
+        wh=red.get('Your Activity',{}).get('Video Watch History',{}).get('VideoWatchHistoryList',[]) or []
         if wh:
-            dfw = pd.DataFrame(wh)
-            tcol = next((c for c in dfw.columns if 'date' in c.lower() or 'time' in c.lower()), None)
+            dfw=pd.DataFrame(wh)
+            tcol=next((c for c in dfw.columns if 'date' in c.lower() or 'time' in c.lower()),None)
             if tcol:
-                dfw['ts'] = pd.to_datetime(dfw[tcol], errors='coerce')
-                dur = dfw['ts'].max() - dfw['ts'].min()
-                st.metric('Longest Session (h)', round(dur.total_seconds()/3600,2))
-                dfw['hour'] = dfw['ts'].dt.hour
+                dfw['ts']=pd.to_datetime(dfw[tcol],errors='coerce')
+                dur=dfw['ts'].max()-dfw['ts'].min()
+                st.subheader('Watch Session Durations')
+                st.metric('Longest Session (h)',round(dur.total_seconds()/3600,2))
+                # average per day
+                daily= dfw.groupby(dfw['ts'].dt.date)['ts'].agg(lambda x: x.max()-x.min())
+                avg_hours=round(daily.dt.total_seconds().mean()/3600,2)
+                st.metric('Average Session (h)',avg_hours)
+                dfw['hour']=dfw['ts'].dt.hour
+                st.subheader('Video Watches by Hour')
                 st.bar_chart(dfw['hour'].value_counts().sort_index())
     else:
-        # Generic time-series
-        for sec, cont in red.items():
-            if isinstance(cont, dict):
-                for k, blk in cont.items():
-                    if isinstance(blk, list) and blk:
-                        dfx = pd.DataFrame(blk)
-                        dc = next((c for c in dfx.columns if c.lower() in ['date','timestamp']), None)
+        for sec,cont in red.items():
+            if isinstance(cont,dict):
+                for k,blk in cont.items():
+                    if isinstance(blk,list) and blk:
+                        dfx=pd.DataFrame(blk)
+                        dc=next((c for c in dfx.columns if c.lower() in ['date','timestamp']),None)
                         if dc:
-                            dfx['ts'] = pd.to_datetime(dfx[dc], errors='coerce')
+                            dfx['ts']=pd.to_datetime(dfx[dc],errors='coerce')
+                            st.subheader(f'{sec} - {k} Over Time')
                             st.line_chart(dfx.groupby(dfx['ts'].dt.date).size().rename('count'))
     st.info('Analysis complete.')
 

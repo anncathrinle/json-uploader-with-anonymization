@@ -173,8 +173,7 @@ if not st.session_state['finalized']:
                 drive_service.files().create(body={'name': fname, 'parents': [red_id]}, media_body=MediaIoBaseUpload(buf, 'application/json')).execute()
                 st.session_state['finalized'] = True
                 st.success('Uploaded redacted JSON')
-
-                                if platform == 'TikTok':
+                if platform == 'TikTok':
                     import pandas as pd
                     st.subheader('TikTok Comments & Posts Analysis')
 
@@ -313,9 +312,6 @@ if not st.session_state['finalized']:
                         )
                     else:
                         st.info('No valid IP locations found.')
-
-                    else:
-                        st.info('No login history found for TikTok.')
         else:
             st.info('Agree to deletion & voluntary to proceed')
     else:

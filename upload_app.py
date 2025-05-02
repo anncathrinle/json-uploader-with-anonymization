@@ -163,6 +163,10 @@ if delete_ok:
                 st.line_chart(df_c.groupby('date').size().rename('count'))
                 df_c['length'] = df_c['comment'].str.len()
                 st.metric('Avg. Comment Length', round(df_c['length'].mean(), 1))
+                # Activity by Weekday
+                df_c['weekday'] = df_c['timestamp'].dt.day_name()
+                st.subheader('Comments by Weekday')
+                st.bar_chart(df_c['weekday'].value_counts())
                 # Semantic: Top Comment Words
                 words = [w.lower() for text in df_c['comment'].dropna() for w in re.findall(r"\b\w+\b", text)]
                 words = [w for w in words if w not in COMMON_STOPWORDS and len(w) > 3]
@@ -181,6 +185,14 @@ if delete_ok:
                 st.metric('Avg. Likes per Post', round(df_p['Likes'].mean(), 1))
                 st.bar_chart(df_p.set_index('timestamp')['Likes'].resample('W').mean())
                 st.table(df_p.nlargest(3, 'Likes')[['Date', 'Likes', 'Link']])
+                # Posting by Hour
+                df_p['hour'] = df_p['timestamp'].dt.hour
+                st.subheader('Posts by Hour of Day')
+                st.bar_chart(df_p['hour'].value_counts().sort_index())
+                # Comment-to-Post Ratio
+                if not df_c.empty:
+                    ratio = len(df_c) / len(df_p)
+                    st.metric('Comments per Post', round(ratio, 2))
                 # Semantic: Top Post Words
                 text_col = next((c for c in df_p.columns if c.lower() in ['desc','description','caption','content']), None)
                 if text_col:
@@ -206,6 +218,14 @@ if delete_ok:
                 st.metric('Total Videos Watched to End', total_watched)
             watch_history = red.get('Your Activity', {}).get('Video Watch History', {}).get('VideoWatchHistoryList', []) or []
             st.metric('Video Watch Events', len(watch_history))
+            if watch_history:
+                df_w = pd.DataFrame(watch_history)
+                ts_col = next((c for c in df_w.columns if 'date' in c.lower() or 'time' in c.lower()), None)
+                if ts_col:
+                    df_w['ts'] = pd.to_datetime(df_w[ts_col], errors='coerce')
+                    df_w['hour'] = df_w['ts'].dt.hour
+                    st.subheader('Video Watches by Hour')
+                    st.bar_chart(df_w['hour'].value_counts().sort_index())
 
         else:
             # Generic time-series for other platforms

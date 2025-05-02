@@ -178,6 +178,14 @@ if delete_ok:
                 st.subheader('Top Hashtags')
                 st.bar_chart(top)
 
+            # Video Watch Analysis
+            summary = red.get('Your Activity', {}).get('Activity Summary', {}).get('ActivitySummaryMap', {}) or {}
+            total_watched = summary.get('videosWatchedToTheEndSinceAccountRegistration')
+            if total_watched is not None:
+                st.metric('Total Videos Watched to End', total_watched)
+            watch_history = red.get('Your Activity', {}).get('Video Watch History', {}).get('VideoWatchHistoryList', []) or []
+            st.metric('Video Watch Events', len(watch_history))
+
             # Login History Analysis
             login_history = red.get('Login History', {}).get('LoginHistoryList', []) or []
             total_logins = len(login_history)
@@ -213,7 +221,6 @@ if delete_ok:
         st.info('Analysis complete. Add more modules as desired.')
 else:
     st.info('Please agree to proceed.')
-
 
 
 

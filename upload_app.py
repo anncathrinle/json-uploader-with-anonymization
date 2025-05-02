@@ -10,7 +10,6 @@ import pandas as pd
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
-from sklearn.feature_extraction.text import TfidfVectorizer
 
 # --- Configuration ---
 logging.getLogger('streamlit.ScriptRunner').setLevel(logging.ERROR)
@@ -35,6 +34,11 @@ if not (drive_service and ROOT_FOLDER_ID):
 
 # --- Helpers ---
 KEY_PATTERNS = [r'Chat History with .+', r'comments?:.*', r'replies?:.*', r'posts?:.*', r'story:.*']
+COMMON_STOPWORDS = {
+    'the', 'and', 'for', 'that', 'with', 'this', 'from', 'they', 'have', 'your',
+    'will', 'just', 'like', 'about', 'when', 'what', 'there', 'their', 'were',
+    'which', 'been', 'more', 'than', 'some', 'could', 'them', 'only', 'also'
+}
 COMMON_PII = {
     'id', 'uuid', 'name', 'full_name', 'username', 'userName',
     'email', 'emailAddress', 'phone', 'phone_number', 'telephoneNumber',
@@ -159,16 +163,13 @@ if delete_ok:
                 st.line_chart(df_c.groupby('date').size().rename('count'))
                 df_c['length'] = df_c['comment'].str.len()
                 st.metric('Avg. Comment Length', round(df_c['length'].mean(), 1))
-                # Semantic: Top Comment Keywords
-                corpus = df_c['comment'].dropna().tolist()
-                if corpus:
-                    vec = TfidfVectorizer(stop_words='english', max_features=10)
-                    X = vec.fit_transform(corpus)
-                    kws = vec.get_feature_names_out()
-                    scores = X.sum(axis=0).A1
-                    kw_df = pd.DataFrame({'keyword': kws, 'score': scores}).sort_values('score', ascending=False)
-                    st.subheader('Top Comment Keywords')
-                    st.table(kw_df)
+                # Semantic: Top Comment Words
+                words = [w.lower() for text in df_c['comment'].dropna() for w in re.findall(r"\b\w+\b", text)]
+                words = [w for w in words if w not in COMMON_STOPWORDS and len(w) > 3]
+                top = pd.Series(words).value_counts().head(10)
+                if not top.empty:
+                    st.subheader('Top Comment Words')
+                    st.bar_chart(top)
 
             # Posts Analysis
             posts = red.get('Post', {}).get('Posts', {}).get('VideoList', []) or []
@@ -180,26 +181,23 @@ if delete_ok:
                 st.metric('Avg. Likes per Post', round(df_p['Likes'].mean(), 1))
                 st.bar_chart(df_p.set_index('timestamp')['Likes'].resample('W').mean())
                 st.table(df_p.nlargest(3, 'Likes')[['Date', 'Likes', 'Link']])
-                # Semantic: Top Post Keywords
+                # Semantic: Top Post Words
                 text_col = next((c for c in df_p.columns if c.lower() in ['desc','description','caption','content']), None)
                 if text_col:
-                    corpus_p = df_p[text_col].dropna().tolist()
-                    if corpus_p:
-                        vec2 = TfidfVectorizer(stop_words='english', max_features=10)
-                        Xp = vec2.fit_transform(corpus_p)
-                        kws2 = vec2.get_feature_names_out()
-                        scores2 = Xp.sum(axis=0).A1
-                        kwp_df = pd.DataFrame({'keyword': kws2, 'score': scores2}).sort_values('score', ascending=False)
-                        st.subheader('Top Post Keywords')
-                        st.table(kwp_df)
+                    words_p = [w.lower() for text in df_p[text_col].dropna() for w in re.findall(r"\b\w+\b", text)]
+                    words_p = [w for w in words_p if w not in COMMON_STOPWORDS and len(w) > 3]
+                    top_p = pd.Series(words_p).value_counts().head(10)
+                    if not top_p.empty:
+                        st.subheader('Top Post Words')
+                        st.bar_chart(top_p)
 
             # Hashtag Analysis
             hashtags = red.get('Hashtag', {}).get('HashtagList', []) or []
             if hashtags:
                 df_h = pd.DataFrame(hashtags)
-                top = df_h['HashtagName'].value_counts().head(5)
+                top_h = df_h['HashtagName'].value_counts().head(5)
                 st.subheader('Top Hashtags')
-                st.bar_chart(top)
+                st.bar_chart(top_h)
 
             # Video Watch Analysis
             summary = red.get('Your Activity', {}).get('Activity Summary', {}).get('ActivitySummaryMap', {}) or {}

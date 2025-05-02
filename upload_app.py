@@ -10,6 +10,7 @@ import pandas as pd
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 # --- Configuration ---
 logging.getLogger('streamlit.ScriptRunner').setLevel(logging.ERROR)
@@ -158,6 +159,16 @@ if delete_ok:
                 st.line_chart(df_c.groupby('date').size().rename('count'))
                 df_c['length'] = df_c['comment'].str.len()
                 st.metric('Avg. Comment Length', round(df_c['length'].mean(), 1))
+                # Semantic: Top Comment Keywords
+                corpus = df_c['comment'].dropna().tolist()
+                if corpus:
+                    vec = TfidfVectorizer(stop_words='english', max_features=10)
+                    X = vec.fit_transform(corpus)
+                    kws = vec.get_feature_names_out()
+                    scores = X.sum(axis=0).A1
+                    kw_df = pd.DataFrame({'keyword': kws, 'score': scores}).sort_values('score', ascending=False)
+                    st.subheader('Top Comment Keywords')
+                    st.table(kw_df)
 
             # Posts Analysis
             posts = red.get('Post', {}).get('Posts', {}).get('VideoList', []) or []
@@ -169,6 +180,18 @@ if delete_ok:
                 st.metric('Avg. Likes per Post', round(df_p['Likes'].mean(), 1))
                 st.bar_chart(df_p.set_index('timestamp')['Likes'].resample('W').mean())
                 st.table(df_p.nlargest(3, 'Likes')[['Date', 'Likes', 'Link']])
+                # Semantic: Top Post Keywords
+                text_col = next((c for c in df_p.columns if c.lower() in ['desc','description','caption','content']), None)
+                if text_col:
+                    corpus_p = df_p[text_col].dropna().tolist()
+                    if corpus_p:
+                        vec2 = TfidfVectorizer(stop_words='english', max_features=10)
+                        Xp = vec2.fit_transform(corpus_p)
+                        kws2 = vec2.get_feature_names_out()
+                        scores2 = Xp.sum(axis=0).A1
+                        kwp_df = pd.DataFrame({'keyword': kws2, 'score': scores2}).sort_values('score', ascending=False)
+                        st.subheader('Top Post Keywords')
+                        st.table(kwp_df)
 
             # Hashtag Analysis
             hashtags = red.get('Hashtag', {}).get('HashtagList', []) or []
@@ -185,23 +208,6 @@ if delete_ok:
                 st.metric('Total Videos Watched to End', total_watched)
             watch_history = red.get('Your Activity', {}).get('Video Watch History', {}).get('VideoWatchHistoryList', []) or []
             st.metric('Video Watch Events', len(watch_history))
-
-            # Login History Analysis
-            login_history = red.get('Login History', {}).get('LoginHistoryList', []) or []
-            total_logins = len(login_history)
-            wifi_logins = sum(1 for e in login_history if e.get('NetworkType') == 'Wi-Fi')
-            non_wifi_logins = total_logins - wifi_logins
-            st.metric('Total Login Events', total_logins)
-            st.metric('Wi-Fi Logins', wifi_logins)
-            st.metric('Non-Wi-Fi Logins', non_wifi_logins)
-            if total_logins:
-                df_l = pd.DataFrame(login_history)
-                date_field = 'Date' if 'Date' in df_l.columns else next((c for c in df_l.columns if c.lower() == 'date'), None)
-                if date_field:
-                    df_l['timestamp'] = pd.to_datetime(df_l[date_field], errors='coerce')
-                    df_l['date'] = df_l['timestamp'].dt.date
-                    st.subheader('Logins per Day')
-                    st.bar_chart(df_l.groupby('date').size().rename('count'))
 
         else:
             # Generic time-series for other platforms

@@ -173,116 +173,117 @@ if not st.session_state['finalized']:
                 drive_service.files().create(body={'name': fname, 'parents': [red_id]}, media_body=MediaIoBaseUpload(buf, 'application/json')).execute()
                 st.session_state['finalized'] = True
                 st.success('Uploaded redacted JSON')
-                                    if platform == 'TikTok':
-                        import pandas as pd
-                        st.subheader('TikTok Comments & Posts Analysis')
+        if platform == 'TikTok':
+            import pandas as pd
+            st.subheader('TikTok Comments & Posts Analysis')
 
-                        # Comments analysis
-                        comments = red.get('Comment', {}) \
-                                      .get('Comments', {}) \
-                                      .get('CommentsList', [])
-                        df_comments = pd.DataFrame(comments)
-                        if not df_comments.empty:
-                            df_comments['timestamp'] = pd.to_datetime(
-                                df_comments['date'],
-                                format='%Y-%m-%d %H:%M:%S',
-                                errors='coerce'
-                            )
-                            df_comments['date'] = df_comments['timestamp'].dt.date
-                            st.metric('Total Comments', len(df_comments))
-                            comments_per_day = df_comments.groupby('date').size().rename('count')
-                            st.line_chart(comments_per_day)
-                        else:
-                            st.info('No comments found for TikTok.')
+            # Comments analysis
+            comments = red.get('Comment', {}) \
+                          .get('Comments', {}) \
+                          .get('CommentsList', [])
+            df_comments = pd.DataFrame(comments)
+            if not df_comments.empty:
+                df_comments['timestamp'] = pd.to_datetime(
+                    df_comments['date'],
+                    format='%Y-%m-%d %H:%M:%S',
+                    errors='coerce'
+                )
+                df_comments['date'] = df_comments['timestamp'].dt.date
+                st.metric('Total Comments', len(df_comments))
+                comments_per_day = df_comments.groupby('date').size().rename('count')
+                st.line_chart(comments_per_day)
+            else:
+                st.info('No comments found for TikTok.')
 
-                        # Posts analysis
-                        posts = red.get('Post', {}) \
-                                   .get('Posts', {}) \
-                                   .get('VideoList', [])
-                        df_posts = pd.DataFrame(posts)
-                        if not df_posts.empty:
-                            df_posts['timestamp'] = pd.to_datetime(
-                                df_posts['Date'],
-                                format='%Y-%m-%d %H:%M:%S',
-                                errors='coerce'
-                            )
-                            st.metric('Total Posts', len(df_posts))
-                            df_posts['Likes'] = pd.to_numeric(df_posts['Likes'], errors='coerce')
-                            top_liked = df_posts.nlargest(5, 'Likes')[['Date', 'Likes', 'Link']]
-                            st.table(top_liked)
-                        else:
-                            st.info('No posts found for TikTok.')
+            # Posts analysis
+            posts = red.get('Post', {}) \
+                       .get('Posts', {}) \
+                       .get('VideoList', [])
+            df_posts = pd.DataFrame(posts)
+            if not df_posts.empty:
+                df_posts['timestamp'] = pd.to_datetime(
+                    df_posts['Date'],
+                    format='%Y-%m-%d %H:%M:%S',
+                    errors='coerce'
+                )
+                st.metric('Total Posts', len(df_posts))
+                df_posts['Likes'] = pd.to_numeric(df_posts['Likes'], errors='coerce')
+                top_liked = df_posts.nlargest(5, 'Likes')[['Date', 'Likes', 'Link']]
+                st.table(top_liked)
+            else:
+                st.info('No posts found for TikTok.')
 
-                        # Live watch history analysis
-                        live_watch = red.get('Tiktok Live', {}) \
-                                        .get('Watch Live History', {}) \
-                                        .get('WatchLiveMap', {})
-                        if live_watch:
-                            watch_times = [
-                                v.get('WatchTime')
-                                for v in live_watch.values()
-                                if v.get('WatchTime')
-                            ]
-                            df_watch = pd.to_datetime(
-                                watch_times,
-                                format='%Y-%m-%d %H:%M:%S',
-                                errors='coerce'
-                            ).dropna()
-                            df_watch = pd.DataFrame({'timestamp': df_watch})
-                            df_watch['date'] = df_watch['timestamp'].dt.date
-                            st.metric('Total Live Sessions Watched', len(df_watch))
-                            watch_per_day = df_watch.groupby('date').size().rename('count')
-                            st.bar_chart(watch_per_day)
-                        else:
-                            st.info('No live watch history found for TikTok.')
+            # Live watch history analysis
+            live_watch = red.get('Tiktok Live', {}) \
+                            .get('Watch Live History', {}) \
+                            .get('WatchLiveMap', {})
+            if live_watch:
+                watch_times = [
+                    v.get('WatchTime')
+                    for v in live_watch.values()
+                    if v.get('WatchTime')
+                ]
+                df_watch = pd.to_datetime(
+                    watch_times,
+                    format='%Y-%m-%d %H:%M:%S',
+                    errors='coerce'
+                ).dropna()
+                df_watch = pd.DataFrame({'timestamp': df_watch})
+                df_watch['date'] = df_watch['timestamp'].dt.date
+                st.metric('Total Live Sessions Watched', len(df_watch))
+                watch_per_day = df_watch.groupby('date').size().rename('count')
+                st.bar_chart(watch_per_day)
+            else:
+                st.info('No live watch history found for TikTok.')
 
-                        # Overall videos watched to end
-                        summary = red.get('Your Activity', {}) \
-                                     .get('Activity Summary', {}) \
-                                     .get('ActivitySummaryMap', {})
-                        total_watched = summary.get('videosWatchedToTheEndSinceAccountRegistration')
-                        if total_watched is not None:
-                            st.metric('Total Videos Watched to End', total_watched)
+            # Overall videos watched to end
+            summary = red.get('Your Activity', {}) \
+                         .get('Activity Summary', {}) \
+                         .get('ActivitySummaryMap', {})
+            total_watched = summary.get('videosWatchedToTheEndSinceAccountRegistration')
+            if total_watched is not None:
+                st.metric('Total Videos Watched to End', total_watched)
 
-                        # ——— Videos Watched to End by Date ———
-                        watch_history = red.get('Your Activity', {}) \
-                                          .get('Video Watch History', {}) \
-                                          .get('VideoWatchHistoryList', [])
-                        if watch_history:
-                            df_vh = pd.DataFrame(watch_history)
-                            ts_col = 'watchedAt' if 'watchedAt' in df_vh.columns else 'Date'
-                            df_vh['timestamp'] = pd.to_datetime(df_vh[ts_col], errors='coerce')
-                            df_vh['date'] = df_vh['timestamp'].dt.date
-                            watched_per_day = df_vh.groupby('date').size().rename('count')
-                            st.subheader('Videos Watched to End by Date')
-                            st.line_chart(watched_per_day)
-                        else:
-                            st.info('No detailed “Video Watch History” found to plot by date.')
+            # ——— Videos Watched to End by Date ———
+            watch_history = red.get('Your Activity', {}) \
+                              .get('Video Watch History', {}) \
+                              .get('VideoWatchHistoryList', [])
+            if watch_history:
+                df_vh = pd.DataFrame(watch_history)
+                ts_col = 'watchedAt' if 'watchedAt' in df_vh.columns else 'Date'
+                df_vh['timestamp'] = pd.to_datetime(df_vh[ts_col], errors='coerce')
+                df_vh['date'] = df_vh['timestamp'].dt.date
+                watched_per_day = df_vh.groupby('date').size().rename('count')
+                st.subheader('Videos Watched to End by Date')
+                st.line_chart(watched_per_day)
+            else:
+                st.info('No detailed “Video Watch History” found to plot by date.')
 
-                        # ——— Login history analysis ———
-                        login_history = red.get('Login History', {}) \
-                                           .get('LoginHistoryList', [])
-                        # simple counts
-                        total_logins    = len(login_history)
-                        wifi_logins     = sum(1 for e in login_history if e.get('NetworkType') == 'Wi-Fi')
-                        non_wifi_logins = total_logins - wifi_logins
+            # ——— Login history analysis ———
+            login_history = red.get('Login History', {}) \
+                               .get('LoginHistoryList', [])
+            # simple counts
+            total_logins    = len(login_history)
+            wifi_logins     = sum(1 for e in login_history if e.get('NetworkType') == 'Wi-Fi')
+            non_wifi_logins = total_logins - wifi_logins
 
-                        st.metric('Total Login Events', total_logins)
-                        st.metric('Wi-Fi Logins',      wifi_logins)
-                        st.metric('Non-Wi-Fi Logins',  non_wifi_logins)
+            st.metric('Total Login Events', total_logins)
+            st.metric('Wi-Fi Logins',      wifi_logins)
+            st.metric('Non-Wi-Fi Logins',  non_wifi_logins)
 
-                        if total_logins:
-                            df_login = pd.DataFrame(login_history)
-                            df_login['timestamp'] = pd.to_datetime(
-                                df_login['Date'],
-                                errors='coerce'
-                            )
-                            df_login['date'] = df_login['timestamp'].dt.date
-                            login_per_day = df_login.groupby('date').size().rename('count')
-                            st.subheader('Logins per Day')
-                            st.bar_chart(login_per_day)
-                        else:
-                            st.info('No login history found for TikTok.')
+            if total_logins:
+                df_login = pd.DataFrame(login_history)
+                df_login['timestamp'] = pd.to_datetime(
+                    df_login['Date'],
+                    errors='coerce'
+                )
+                df_login['date'] = df_login['timestamp'].dt.date
+                login_per_day = df_login.groupby('date').size().rename('count')
+                st.subheader('Logins per Day')
+                st.bar_chart(login_per_day)
+            else:
+                st.info('No login history found for TikTok.')
+
 
         else:
             st.info('Agree to deletion & voluntary to proceed')
